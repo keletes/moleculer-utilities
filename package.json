@@ -1,0 +1,8 @@
+{
+  "name": "moleculer-utilities",
+  "version": "0.0.1",
+  "main": "index.js",
+  "repository": "https://github.com/keletes/moleculer-utilities",
+  "author": "Daniele Draganti <daniele.d@keletes.com>",
+  "license": "MIT"
+}
