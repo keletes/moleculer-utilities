@@ -12,10 +12,10 @@ module.exports = function Authorizer(opts) {
     hooks: {
       before: {
         '*': async function(ctx) {
-          if (this.authorizer &&
-              this.authorizer.whitelist &&
-              this.authorizer.whitelist.indexOf &&
-              this.authorizer.whitelist.indexOf(ctx.action.name) > -1
+          if (this.settings.authorizer &&
+              this.settings.authorizer.whitelist &&
+              this.settings.authorizer.whitelist.indexOf &&
+              this.settings.authorizer.whitelist.indexOf(ctx.action.name) > -1
           )
             return;
           if (!ctx.meta.role || !ctx.meta.role.actions || !ctx.meta.role.actions.indexOf || ctx.meta.role.actions.indexOf(ctx.action.name) < 0)
