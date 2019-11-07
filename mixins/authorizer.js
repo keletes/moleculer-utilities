@@ -18,7 +18,12 @@ module.exports = function Authorizer(opts) {
               this.settings.authorizer.whitelist.indexOf(ctx.action.name) > -1
           )
             return;
-          if (!ctx.meta.authorizedActions || !ctx.meta.role.authorizedActions.indexOf || ctx.meta.role.authorizedActions.indexOf(ctx.action.name) < 0)
+          const authorizer = ctx.meta.authorizer;
+          if (!authorizer ||
+              !authorizer.actions ||
+              !authorizer.actions.indexOf ||
+              authorizer.actions.indexOf(ctx.action.name) < 0
+          )
             throw new MoleculerError('Action not authorized.', 403, 'E_NOT_AUTHORIZED');
         }
       }
