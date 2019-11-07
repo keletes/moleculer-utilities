@@ -12,6 +12,9 @@ module.exports = function Authorizer(opts) {
     hooks: {
       before: {
         '*': async function(ctx) {
+
+          console.log(ctx.action);
+
           if (this.settings.authorizer &&
               this.settings.authorizer.whitelist &&
               this.settings.authorizer.whitelist.indexOf &&
