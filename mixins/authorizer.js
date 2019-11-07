@@ -20,6 +20,10 @@ module.exports = function Authorizer(opts) {
             return;
 
           const authorizer = ctx.meta.authorizer;
+
+          console.log(ctx.action.name);
+          console.log(ctx.meta.authorizer);
+
           if (!authorizer ||
               !authorizer.actions ||
               !authorizer.actions.indexOf ||
