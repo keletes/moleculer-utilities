@@ -6,6 +6,6 @@
   "author": "Daniele Draganti <daniele.d@keletes.com>",
   "license": "MIT",
   "devDependencies": {
-    "moleculer": "^0.13.11"
+    "moleculer": "^0.14.3"
   }
 }
