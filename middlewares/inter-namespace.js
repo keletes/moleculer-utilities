@@ -11,7 +11,6 @@ module.exports = function InterNamespaceMiddleware(opts) {
   return {
     created(broker) {
       thisBroker = broker;
-      broker.logger.info("Hi!");
       opts.forEach(nsOpts => {
         if (_.isString(nsOpts)) {
           nsOpts = {
@@ -20,7 +19,7 @@ module.exports = function InterNamespaceMiddleware(opts) {
         }
 
         const ns = nsOpts.namespace;
-        broker.logger.info(`Create internamespace broker for '${ns} namespace...'`);
+        this.logger.info(`Create internamespace broker for '${ns} namespace...'`);
         const brokerOpts = _.defaultsDeep({}, nsOpts, { nodeID: null, middlewares: null }, broker.options);
         brokers[ns] = new ServiceBroker(brokerOpts);
       });
