@@ -11,6 +11,7 @@ module.exports = function InterNamespaceMiddleware(opts) {
   return {
     created(broker) {
       thisBroker = broker;
+      console.log(broker);
       opts.forEach(nsOpts => {
         if (_.isString(nsOpts)) {
           nsOpts = {
@@ -36,6 +37,8 @@ module.exports = function InterNamespaceMiddleware(opts) {
     call(next) {
 
       return function(actionName, params, opts = {}) {
+
+        console.log(thisBroker);
 
         if (_.isString(actionName) && actionName.includes("@")) {
           const [action, namespace] = actionName.split("@");
