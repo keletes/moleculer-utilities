@@ -38,8 +38,6 @@ module.exports = function InterNamespaceMiddleware(opts) {
 
       return function(actionName, params, opts = {}) {
 
-        console.log(thisBroker);
-
         if (_.isString(actionName) && actionName.includes("@")) {
           const [action, namespace] = actionName.split("@");
 
