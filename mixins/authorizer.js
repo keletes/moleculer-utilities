@@ -12,15 +12,16 @@ module.exports = function Authorizer(opts) {
     hooks: {
       before: {
         "*": async function (ctx) {
+          const action = `${ctx.action.service.name}.${ctx.action.rawName}`;
           if (
-            this.settings?.authorizer?.whitelist?.indexOf?.(ctx.action.name) >
+            this.settings?.authorizer?.whitelist?.indexOf?.(action) >
             -1
           )
             return;
 
           const authorizer = ctx.meta.authorizer;
 
-          if (authorizer.actions?.indexOf?.(ctx.action.name) < 0)
+          if (authorizer.actions?.indexOf?.(action) < 0)
             throw new MoleculerError(
               "Action not authorized.",
               403,
