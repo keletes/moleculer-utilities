@@ -2,5 +2,6 @@
 
 module.exports = {
   InterNamespace: require("./inter-namespace.js"),
-  K8sHealthCheck: require("./k8s-health-check.js")
+  K8sHealthCheck: require("./k8s-health-check.js"),
+  Prometheus: require("./prometheus.js"),
 }
