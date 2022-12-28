@@ -13,8 +13,8 @@ interface Options {
   port: string
 }
 
-export default function K8sMiddleware(opts: Options): Omit<ServiceSchema, 'name'> {
-  opts = defaultsDeep(opts, {
+export default function K8sMiddleware(opts?: Options): Omit<ServiceSchema, 'name'> {
+  const options = defaultsDeep(opts, {
     port: 3001,
     readiness: {
       path: "/ready",
@@ -22,13 +22,13 @@ export default function K8sMiddleware(opts: Options): Omit<ServiceSchema, 'name'
     liveness: {
       path: "/live",
     },
-  });
+  }) as Options;
 
   let state = "down";
   let server: Server;
 
   function handler(req: IncomingMessage, res: ServerResponse) {
-    if (req.url == opts.readiness.path || req.url == opts.liveness.path) {
+    if (req.url == options.readiness.path || req.url == options.liveness.path) {
       const resHeader = {
         "Content-Type": "application/json; charset=utf-8",
       };
@@ -39,7 +39,7 @@ export default function K8sMiddleware(opts: Options): Omit<ServiceSchema, 'name'
         timestamp: Date.now(),
       };
 
-      if (req.url == opts.readiness?.path) {
+      if (req.url == options.readiness.path) {
         // Readiness if the broker started successfully.
         // https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
         res.writeHead(state == "up" ? 200 : 503, resHeader);
@@ -61,7 +61,7 @@ export default function K8sMiddleware(opts: Options): Omit<ServiceSchema, 'name'
       state = "starting";
 
       server = createServer(handler);
-      server.listen(opts.port, (err?: Error) => {
+      server.listen(options.port, (err?: Error) => {
         if (err) {
           return this.broker.logger.error(
             "Unable to start health-check server",
@@ -72,10 +72,10 @@ export default function K8sMiddleware(opts: Options): Omit<ServiceSchema, 'name'
         this.broker.logger.info("");
         this.broker.logger.info("K8s health-check server listening on");
         this.broker.logger.info(
-          `    http://localhost:${opts.port}${opts.readiness.path}`
+          `    http://localhost:${options.port}${options.readiness.path}`
         );
         this.broker.logger.info(
-          `    http://localhost:${opts.port}${opts.liveness.path}`
+          `    http://localhost:${options.port}${options.liveness.path}`
         );
         this.broker.logger.info("");
       });
