@@ -10,8 +10,8 @@ export default function InterNamespaceMiddleware(opts: object): Omit<ServiceSche
   const brokers: {[key: string]: ServiceBroker} = {};
 
   return {
-    created() {
-      thisBroker = this.broker;
+    created(broker: ServiceBroker) {
+      thisBroker = broker;
       opts.forEach(nsOpts => {
         if (isString(nsOpts)) {
           nsOpts = {

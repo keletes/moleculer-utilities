@@ -12,8 +12,8 @@ function InterNamespaceMiddleware(opts) {
     let thisBroker;
     const brokers = {};
     return {
-        created() {
-            thisBroker = this.broker;
+        created(broker) {
+            thisBroker = broker;
             opts.forEach(nsOpts => {
                 if ((0, lodash_isstring_1.default)(nsOpts)) {
                     nsOpts = {
