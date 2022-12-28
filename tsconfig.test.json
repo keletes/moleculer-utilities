@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"target": "es6",
+		"module": "commonjs",
+		"strict": true,
+		"suppressImplicitAnyIndexErrors": true,
+		"noEmitOnError": true,
+		"noImplicitReturns": true,
+		"noFallthroughCasesInSwitch": true
+	},
+	"include": [
+		"test/*.spec.ts"
+	],
+	"exclude": [
+		"node_modules"
+	]
+}
