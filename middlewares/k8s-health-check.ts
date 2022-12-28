@@ -1,4 +1,4 @@
-import { ServiceSchema } from 'moleculer';
+import { ServiceBroker, ServiceSchema } from 'moleculer';
 import defaultsDeep from 'lodash.defaultsdeep';
 import {createServer, STATUS_CODES} from 'http';
 import type {Server, IncomingMessage, ServerResponse} from 'http';
@@ -57,27 +57,27 @@ export default function K8sMiddleware(opts?: Options): Omit<ServiceSchema, 'name
   }
 
   return {
-    created() {
+    created(broker: ServiceBroker) {
       state = "starting";
 
       server = createServer(handler);
       server.listen(options.port, (err?: Error) => {
         if (err) {
-          return this.broker.logger.error(
+          return broker.logger.error(
             "Unable to start health-check server",
             err
           );
         }
 
-        this.broker.logger.info("");
-        this.broker.logger.info("K8s health-check server listening on");
-        this.broker.logger.info(
+        broker.logger.info("");
+        broker.logger.info("K8s health-check server listening on");
+        broker.logger.info(
           `    http://localhost:${options.port}${options.readiness.path}`
         );
-        this.broker.logger.info(
+        broker.logger.info(
           `    http://localhost:${options.port}${options.liveness.path}`
         );
-        this.broker.logger.info("");
+        broker.logger.info("");
       });
     },
 
