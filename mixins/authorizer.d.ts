@@ -7,5 +7,5 @@ interface Settings {
         whitelist: [string];
     };
 }
-export default function Authorizer(opts: Options): Schema;
+export default function Authorizer(opts?: Options): Schema;
 export {};
