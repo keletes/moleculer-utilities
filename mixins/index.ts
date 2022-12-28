@@ -1,1 +1,2 @@
-export * from './authorizer';
+import Authorizer from './authorizer';
+export default { Authorizer };
