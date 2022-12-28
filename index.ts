@@ -1,4 +1,4 @@
-import middlewares from './middlewares';
-import mixins from './mixins';
+import Middlewares from './middlewares';
+import Mixins from './mixins';
 
-export default {middlewares, mixins};
+export default {Middlewares, Mixins};
