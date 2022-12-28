@@ -17,7 +17,7 @@ interface Settings {
   }
 }
 
-export default function Authorizer(opts: Options): Schema {
+export default function Authorizer(opts?: Options): Schema {
   return {
     settings: {
       authorizer: {
