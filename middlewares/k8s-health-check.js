@@ -45,18 +45,18 @@ function K8sMiddleware(opts) {
         }
     }
     return {
-        created() {
+        created(broker) {
             state = "starting";
             server = (0, http_1.createServer)(handler);
             server.listen(options.port, (err) => {
                 if (err) {
-                    return this.broker.logger.error("Unable to start health-check server", err);
+                    return broker.logger.error("Unable to start health-check server", err);
                 }
-                this.broker.logger.info("");
-                this.broker.logger.info("K8s health-check server listening on");
-                this.broker.logger.info(`    http://localhost:${options.port}${options.readiness.path}`);
-                this.broker.logger.info(`    http://localhost:${options.port}${options.liveness.path}`);
-                this.broker.logger.info("");
+                broker.logger.info("");
+                broker.logger.info("K8s health-check server listening on");
+                broker.logger.info(`    http://localhost:${options.port}${options.readiness.path}`);
+                broker.logger.info(`    http://localhost:${options.port}${options.liveness.path}`);
+                broker.logger.info("");
             });
         },
         // After broker started

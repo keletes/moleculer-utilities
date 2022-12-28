@@ -21,7 +21,7 @@ export default function InterNamespaceMiddleware(opts: object): Omit<ServiceSche
 
         const ns: string = nsOpts.namespace;
         this.logger.info(`Create internamespace broker for '${ns} namespace...'`);
-        const brokerOpts = defaultsDeep({}, nsOpts, { nodeID: null, middlewares: null }, this.broker.options);
+        const brokerOpts = defaultsDeep({}, nsOpts, { nodeID: null, middlewares: null }, broker.options);
         brokers[ns] = new ServiceBroker(brokerOpts);
       });
     },

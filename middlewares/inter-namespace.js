@@ -22,7 +22,7 @@ function InterNamespaceMiddleware(opts) {
                 }
                 const ns = nsOpts.namespace;
                 this.logger.info(`Create internamespace broker for '${ns} namespace...'`);
-                const brokerOpts = (0, lodash_defaultsdeep_1.default)({}, nsOpts, { nodeID: null, middlewares: null }, this.broker.options);
+                const brokerOpts = (0, lodash_defaultsdeep_1.default)({}, nsOpts, { nodeID: null, middlewares: null }, broker.options);
                 brokers[ns] = new moleculer_1.ServiceBroker(brokerOpts);
             });
         },

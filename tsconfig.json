@@ -6,8 +6,7 @@
 		"noEmitOnError": true,
 		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
-		"esModuleInterop": true,
-		"declaration": true
+		"esModuleInterop": true
 	},
 	"include": [
 		"index.ts",
