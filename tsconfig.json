@@ -2,6 +2,8 @@
 	"compilerOptions": {
 		"target": "es2021",
 		"module": "commonjs",
+		"rootDir": "src",
+		"outDir": ".",
 		"strict": true,
 		"noEmitOnError": true,
 		"noImplicitReturns": true,
@@ -9,11 +11,6 @@
 		"esModuleInterop": true,
 		"declaration": true
 	},
-	"include": [
-		"index.ts",
-		"middlewares",
-		"mixins"
-	],
 	"exclude": [
 		"node_modules"
 	]
