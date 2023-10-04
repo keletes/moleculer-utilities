@@ -1,5 +1,6 @@
 import { ServiceSchema } from 'moleculer';
 interface Options {
+    whitelist?: string[];
 }
 type Schema = Omit<ServiceSchema<Settings>, 'name'>;
 interface Settings {

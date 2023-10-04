@@ -7,7 +7,7 @@ export default function InterNamespaceMiddleware(opts: object): Omit<ServiceSche
   throw new Error("Must be an Array");
 
   let thisBroker: ServiceBroker;
-  const brokers: {[key: string]: ServiceBroker} = {};
+  const brokers: Record<string, ServiceBroker> = {};
 
   return {
     created(broker: ServiceBroker) {

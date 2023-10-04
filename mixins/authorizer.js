@@ -5,9 +5,7 @@ const { MoleculerError } = moleculer_1.Errors;
 function Authorizer(opts) {
     return {
         settings: {
-            authorizer: {
-            //whitelist: []
-            },
+            authorizer: opts
         },
         hooks: {
             before: {

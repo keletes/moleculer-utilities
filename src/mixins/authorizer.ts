@@ -1,7 +1,9 @@
 import { Context, Errors, ServiceSchema } from 'moleculer';
 const {MoleculerError} = Errors;
 
-interface Options {}
+interface Options {
+  whitelist?: string[]
+}
 
 type Schema = Omit<ServiceSchema<Settings>, 'name'>;
 
@@ -20,9 +22,7 @@ interface Settings {
 export default function Authorizer(opts?: Options): Schema {
   return {
     settings: {
-      authorizer: {
-        //whitelist: []
-      },
+      authorizer: opts
     },
 
     hooks: {
