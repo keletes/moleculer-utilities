@@ -38,7 +38,7 @@ export default function Authorizer(opts?: Options): Schema {
           const authorizer = ctx.meta.authorizer;
 
           // If unauthenticated or unauthorized, return 403
-          if (authorizer.actions?.indexOf?.(action) >= 0)
+          if (authorizer?.actions?.indexOf?.(action) >= 0)
             return;
           throw new MoleculerError(
             "Action not authorized.",
