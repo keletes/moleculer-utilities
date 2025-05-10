@@ -26,18 +26,6 @@ export default function InterNamespaceMiddleware(opts: object): Omit<ServiceSche
       });
     },
 
-    // Can be removed once PR [#1173](https://github.com/moleculerjs/moleculer/pull/1173) is implemented.
-    //@ts-ignore-errors
-    started() {
-      return Promise.all(Object.values(brokers).map(b => b.start()));
-    },
-
-    // Can be removed once PR [#1173](https://github.com/moleculerjs/moleculer/pull/1173) is implemented.
-    //@ts-ignore-errors
-    stopped() {
-      return Promise.all(Object.values(brokers).map(b => b.stop()));
-    },
-
     call(next: Function) {
 
       return function(actionName: string, params: object, opts = {}) {
