@@ -4,7 +4,7 @@ import type { RateLimitSettings } from 'moleculer-web';
 import type { RedisClientType } from 'redis';
 export interface RedisRateLimitSettings extends RateLimitSettings {
     prefix?: string;
-    client?: RedisClientType;
+    client: RedisClientType;
 }
 /**
  * Improved memory store for Rate limiter
