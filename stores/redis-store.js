@@ -10,7 +10,7 @@ var __classPrivateFieldGet = (this && this.__classPrivateFieldGet) || function (
     if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
     return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
 };
-var _RedisStore_instances, _RedisStore_client, _RedisStore_clearPeriod, _RedisStore_prefix, _RedisStore_getFullKey;
+var _RedisStore_instances, _RedisStore_client, _RedisStore_clearPeriod, _RedisStore_prefix, _RedisStore_broker, _RedisStore_getFullKey;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RedisStore = void 0;
 const extended_rate_limit_store_1 = require("./extended-rate-limit-store");
@@ -31,7 +31,9 @@ class RedisStore extends extended_rate_limit_store_1.ExtendedRateLimitStore {
         _RedisStore_client.set(this, void 0);
         _RedisStore_clearPeriod.set(this, void 0);
         _RedisStore_prefix.set(this, void 0);
+        _RedisStore_broker.set(this, void 0);
         __classPrivateFieldSet(this, _RedisStore_clearPeriod, clearPeriod, "f");
+        __classPrivateFieldSet(this, _RedisStore_broker, broker, "f");
         if (opts?.client) {
             __classPrivateFieldSet(this, _RedisStore_client, opts?.client, "f");
             __classPrivateFieldSet(this, _RedisStore_prefix, opts?.prefix ?? '', "f");
@@ -47,7 +49,7 @@ class RedisStore extends extended_rate_limit_store_1.ExtendedRateLimitStore {
      * @returns {Number}
      * @memberof MemoryStore
      */
-    async inc(key, setExpire) {
+    async inc(key, setExpire = true) {
         key = __classPrivateFieldGet(this, _RedisStore_instances, "m", _RedisStore_getFullKey).call(this, key);
         const counter = __classPrivateFieldGet(this, _RedisStore_client, "f").incr(key);
         if (setExpire)
@@ -67,7 +69,7 @@ class RedisStore extends extended_rate_limit_store_1.ExtendedRateLimitStore {
     }
 }
 exports.RedisStore = RedisStore;
-_RedisStore_client = new WeakMap(), _RedisStore_clearPeriod = new WeakMap(), _RedisStore_prefix = new WeakMap(), _RedisStore_instances = new WeakSet(), _RedisStore_getFullKey = function _RedisStore_getFullKey(key) {
+_RedisStore_client = new WeakMap(), _RedisStore_clearPeriod = new WeakMap(), _RedisStore_prefix = new WeakMap(), _RedisStore_broker = new WeakMap(), _RedisStore_instances = new WeakSet(), _RedisStore_getFullKey = function _RedisStore_getFullKey(key) {
     if (__classPrivateFieldGet(this, _RedisStore_prefix, "f"))
         return `${__classPrivateFieldGet(this, _RedisStore_prefix, "f")}${key}`;
     return key;

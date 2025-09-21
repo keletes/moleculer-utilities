@@ -24,7 +24,7 @@ export declare class RedisStore extends ExtendedRateLimitStore {
      * @returns {Number}
      * @memberof MemoryStore
      */
-    inc(key: string, setExpire?: true): Promise<number>;
+    inc(key: string, setExpire?: boolean): Promise<number>;
     /**
      * Decrement the counter by key
      *

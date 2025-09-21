@@ -43,7 +43,7 @@ export class RedisStore extends ExtendedRateLimitStore {
 	 * @returns {Number}
 	 * @memberof MemoryStore
 	 */
-	async inc(key: string, setExpire?: true): Promise<number> {
+	async inc(key: string, setExpire = true): Promise<number> {
 		key = this.#getFullKey(key);
 		const counter = this.#client.incr(key);
 		if (setExpire)
