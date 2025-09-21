@@ -2,7 +2,7 @@ import { ExtendedRateLimitStore } from './extended-rate-limit-store';
 import type { ServiceBroker } from 'moleculer';
 import type { RateLimitSettings } from 'moleculer-web';
 import type { RedisClientType } from 'redis';
-interface RedisRateLimitSettings extends RateLimitSettings {
+export interface RedisRateLimitSettings extends RateLimitSettings {
     prefix?: string;
     client: RedisClientType;
 }
@@ -32,4 +32,3 @@ export declare class RedisStore extends ExtendedRateLimitStore {
      */
     dec(key: string): Promise<number>;
 }
-export {};
