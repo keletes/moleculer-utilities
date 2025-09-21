@@ -5,6 +5,7 @@ import type { RateLimitSettings } from 'moleculer-web';
 const { MoleculerClientError, MoleculerError } = Errors;
 import type { ServiceHooksBefore } from 'moleculer';
 import objectHash from 'object-hash';
+import isEqual from 'lodash.isequal';
 
 // XOR Type from https://medium.com/@aeron169/building-a-xor-type-in-typescript-5f4f7e709a9d
 type Without<T, U> = { [P in Exclude<keyof T, keyof U>]?: never };
@@ -53,9 +54,11 @@ export function KeyRateLimiter(opts?: Options): Mixin {
       const store = this.rateLimitStore;
       if (!store) throw new MoleculerError('No store defined for the rate limiter mixin.');
 
-      const limiters = rules[path]!;
+      let limiters = rules[path]!;
       if (ctx.meta.authorizer.rateLimits?.[path])
         for (const limiter of ctx.meta.authorizer.rateLimits[path]!) {
+          // Filtering out limiters with the same params
+          limiters = limiters.filter((el) => !isEqual(el.params, limiter.params));
           limiters.push(limiter);
         }
 

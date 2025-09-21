@@ -8,6 +8,7 @@ const moleculer_1 = require("moleculer");
 const memory_store_1 = require("../stores/memory-store");
 const { MoleculerClientError, MoleculerError } = moleculer_1.Errors;
 const object_hash_1 = __importDefault(require("object-hash"));
+const lodash_isequal_1 = __importDefault(require("lodash.isequal"));
 function KeyRateLimiter(opts) {
     const rules = { '*': undefined };
     for (const path in opts?.paths) {
@@ -26,9 +27,11 @@ function KeyRateLimiter(opts) {
             const store = this.rateLimitStore;
             if (!store)
                 throw new MoleculerError('No store defined for the rate limiter mixin.');
-            const limiters = rules[path];
+            let limiters = rules[path];
             if (ctx.meta.authorizer.rateLimits?.[path])
                 for (const limiter of ctx.meta.authorizer.rateLimits[path]) {
+                    // Filtering out limiters with the same params
+                    limiters = limiters.filter((el) => !(0, lodash_isequal_1.default)(el.params, limiter.params));
                     limiters.push(limiter);
                 }
             // If no rate limit is set for this path, allow.
