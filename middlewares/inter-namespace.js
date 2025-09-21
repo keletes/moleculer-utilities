@@ -26,16 +26,6 @@ function InterNamespaceMiddleware(opts) {
                 brokers[ns] = new moleculer_1.ServiceBroker(brokerOpts);
             });
         },
-        // Can be removed once PR [#1173](https://github.com/moleculerjs/moleculer/pull/1173) is implemented.
-        //@ts-ignore-errors
-        started() {
-            return Promise.all(Object.values(brokers).map(b => b.start()));
-        },
-        // Can be removed once PR [#1173](https://github.com/moleculerjs/moleculer/pull/1173) is implemented.
-        //@ts-ignore-errors
-        stopped() {
-            return Promise.all(Object.values(brokers).map(b => b.stop()));
-        },
         call(next) {
             return function (actionName, params, opts = {}) {
                 if ((0, lodash_isstring_1.default)(actionName) && actionName.includes("@")) {

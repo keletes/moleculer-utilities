@@ -1,6 +1,6 @@
 {
   "name": "moleculer-utilities",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "main": "index.js",
   "scripts": {
     "prepublish": "rm -Rf ./middlewares && rm -Rf ./mixins && ttsc",
@@ -15,19 +15,23 @@
     "@types/lodash.defaultsdeep": "^4.6.7",
     "@types/lodash.isstring": "^4.0.7",
     "@types/node": "^18.11.18",
+    "@types/object-hash": "^3.0.6",
     "jest": "^24.9.0",
     "jest-cli": "^24.9.0",
     "moleculer": "^0.14.27",
+    "moleculer-web": "^0.10.5",
+    "redis": "^5.8.2",
     "tslint": "^6.1.3",
     "ttypescript": "^1.5.15",
     "typescript": "^4.9.4"
   },
   "dependencies": {
     "lodash.defaultsdeep": "^4.6.1",
-    "lodash.isstring": "^4.0.1"
+    "lodash.isstring": "^4.0.1",
+    "object-hash": "^3.0.0"
   },
   "peerDependencies": {
-    "typescript": ">=4.0.0",
-    "moleculer": ">=0.14.0"
+    "moleculer": ">=0.14.0",
+    "typescript": ">=4.0.0"
   }
 }

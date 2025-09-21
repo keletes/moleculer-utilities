@@ -1,2 +1,3 @@
 import { default as Authorizer } from './authorizer';
-export { Authorizer };
+import { KeyRateLimiter } from './key-rate-limiter';
+export { Authorizer, KeyRateLimiter };

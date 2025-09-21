@@ -9,7 +9,9 @@
 		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
 		"esModuleInterop": true,
-		"declaration": true
+		"declaration": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true
 	},
 	"exclude": [
 		"node_modules"
