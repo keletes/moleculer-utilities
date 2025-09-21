@@ -26,6 +26,12 @@ function InterNamespaceMiddleware(opts) {
                 brokers[ns] = new moleculer_1.ServiceBroker(brokerOpts);
             });
         },
+        started() {
+            return Promise.all(Object.values(brokers).map(b => b.start()));
+        },
+        stopped() {
+            return Promise.all(Object.values(brokers).map(b => b.stop()));
+        },
         call(next) {
             return function (actionName, params, opts = {}) {
                 if ((0, lodash_isstring_1.default)(actionName) && actionName.includes("@")) {

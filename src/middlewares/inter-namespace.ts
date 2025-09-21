@@ -26,6 +26,14 @@ export default function InterNamespaceMiddleware(opts: object): Omit<ServiceSche
       });
     },
 
+    started() {
+      return Promise.all(Object.values(brokers).map(b => b.start()));
+    },
+
+    stopped() {
+      return Promise.all(Object.values(brokers).map(b => b.stop()));
+    },
+
     call(next: Function) {
 
       return function(actionName: string, params: object, opts = {}) {

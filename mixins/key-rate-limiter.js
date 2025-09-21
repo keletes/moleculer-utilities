@@ -57,8 +57,8 @@ function KeyRateLimiter(opts) {
                 const setExpire = limiter.timed ? true : false;
                 const counter = await store.inc(key, setExpire);
                 if (counter >= limit) {
-                    // If reached limit, we decrease it in case it’s concurrent, to allow a correct count (we always increase)
-                    // at first)
+                    // If reached limit, we decrease it in case it’s concurrent, to allow
+                    // a correct count (we always increase at first)
                     if (!setExpire)
                         store.dec(key);
                     throw new MoleculerClientError("Rate limit exceeded", 429);
