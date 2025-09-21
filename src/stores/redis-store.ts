@@ -8,7 +8,7 @@ const MoleculerError = Errors.MoleculerError;
 
 export interface RedisRateLimitSettings extends RateLimitSettings {
 	prefix?: string,
-	client: RedisClientType
+	client?: RedisClientType
 }
 
 /**
