@@ -1,4 +1,4 @@
-import { RateLimitStore } from 'moleculer-web';
+import { ExtendedRateLimitStore } from './extended-rate-limit-store';
 import { Errors } from 'moleculer';
 import type { ServiceBroker } from 'moleculer';
 import type { RateLimitSettings } from 'moleculer-web';
@@ -16,21 +16,21 @@ interface RedisRateLimitSettings extends RateLimitSettings {
  *
  * @class MemoryStore
  */
-export class RedisStore extends RateLimitStore {
+export class RedisStore extends ExtendedRateLimitStore {
 
-	client: RedisClientType;
-	clearPeriod: number;
-	prefix: string;
+	#client: RedisClientType;
+	#clearPeriod: number;
+	#prefix: string;
 
 	/**
 	 * @inheritdoc
 	 */
 	constructor(clearPeriod: number, opts?: RedisRateLimitSettings, broker?: ServiceBroker | undefined) {
 		super(clearPeriod, opts, broker);
-		this.clearPeriod = clearPeriod;
+		this.#clearPeriod = clearPeriod;
 		if (opts?.client) {
-			this.client = opts?.client;
-			this.prefix = opts?.prefix ?? '';
+			this.#client = opts?.client;
+			this.#prefix = opts?.prefix ?? '';
 		} else {
 			throw new MoleculerError('No Redis client defined in rate limiter options.');
 		}
@@ -44,12 +44,12 @@ export class RedisStore extends RateLimitStore {
 	 * @memberof MemoryStore
 	 */
 	async inc(key: string, setExpire?: true): Promise<number> {
-		if (this.prefix) key = `${this.prefix}${key}`;
-		const counter = this.client.incr(key);
+		key = this.#getFullKey(key);
+		const counter = this.#client.incr(key);
 		if (setExpire)
-			this.client.expire(
+			this.#client.expire(
 				key,
-				this.clearPeriod,
+				this.#clearPeriod / 1000,
 			);
 		return counter;
 	}
@@ -60,10 +60,14 @@ export class RedisStore extends RateLimitStore {
 	 * @memberof MemoryStore
 	 */
 	async dec(key: string): Promise<number> {
-		if (this.prefix) key = `${this.prefix}${key}`;
-		const counter = this.client.decr(key);
-		return counter;
+		key = this.#getFullKey(key);
+		if (Number(await this.#client.get(key)) > 0)
+			return this.#client.decr(key);
+		return 0;
+	}
+
+	#getFullKey(key: string): string {
+		if (this.#prefix) return `${this.#prefix}${key}`;
+		return key;
 	}
 }
-
-module.exports = RedisStore;

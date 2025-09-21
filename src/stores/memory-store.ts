@@ -1,4 +1,4 @@
-import { RateLimitStore } from 'moleculer-web';
+import { ExtendedRateLimitStore } from './extended-rate-limit-store';
 import type { ServiceBroker } from 'moleculer';
 import type { RateLimitSettings } from 'moleculer-web';
 
@@ -7,10 +7,10 @@ import type { RateLimitSettings } from 'moleculer-web';
  *
  * @class MemoryStore
  */
-export class MemoryStore extends RateLimitStore {
+export class MemoryStore extends ExtendedRateLimitStore {
 
-	hits: Map<string, number> = new Map();
-	timer: NodeJS.Timer;
+	#hits: Map<string, number> = new Map();
+	#timer: NodeJS.Timer;
 
 	/**
 	 * @inheritdoc
@@ -19,33 +19,39 @@ export class MemoryStore extends RateLimitStore {
 		super(clearPeriod, opts, broker);
 		this.resetTime = Date.now() + clearPeriod;
 
-		this.timer = setInterval(() => {
+		this.#timer = setInterval(() => {
 			this.resetTime = Date.now() + clearPeriod;
 			this.reset();
 		}, clearPeriod);
 
-		this.timer.unref();
+		this.#timer.unref();
 	}
 
 	/**
-	 * @inheritdoc
+	 * Increment the counter by key
+	 * @param {String} key
+	 * @param {boolean} setExpire - Whether the key should automatically expire based on the set window
+	 * @returns {Number}
+	 * @memberof MemoryStore
 	 */
-	inc(key: string): number {
-		let counter = this.hits.get(key) || 0;
+	async inc(key: string, setExpire?: true): Promise<number> {
+		let counter = this.#hits.get(key) || 0;
 		counter++;
-		this.hits.set(key, counter);
+		this.#hits.set(key, counter);
 		return counter;
 	}
 
 	/**
 	 * Decrement the counter by key
 	 *
+	 * @param {String} key
+	 * @returns {Number}
 	 * @memberof MemoryStore
 	 */
 	dec(key: string): number {
-		let counter = this.hits.get(key) || 0;
+		let counter = this.#hits.get(key) || 0;
 		counter--;
-		this.hits.set(key, counter);
+		this.#hits.set(key, counter);
 		return counter;
 	}
 
@@ -53,8 +59,6 @@ export class MemoryStore extends RateLimitStore {
 	 * @inheritdoc
 	 */
 	reset(): void {
-		this.hits.clear();
+		this.#hits.clear();
 	}
 }
-
-module.exports = MemoryStore;

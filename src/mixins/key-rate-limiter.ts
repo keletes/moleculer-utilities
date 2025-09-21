@@ -1,5 +1,7 @@
 import { Context, Errors, ServiceSchema } from 'moleculer';
-import type { RateLimitStore } from 'moleculer-web';
+import { ExtendedRateLimitStore } from '../stores/extended-rate-limit-store';
+import { MemoryStore } from '../stores/memory-store';
+import type { RateLimitSettings } from 'moleculer-web';
 const { MoleculerClientError, MoleculerError } = Errors;
 import type { ServiceHooksBefore } from 'moleculer';
 import objectHash from 'object-hash';
@@ -12,22 +14,24 @@ export type LimiterPath = XOR<{timed: number, params?: Record<string, any>}, {co
 
 export interface Options {
   paths: Record<string, Array<LimiterPath> | undefined>;
-  store: RateLimitStore
 }
-
 
 interface Meta {
   apiKey: string;
   authorizer: {
-    rateLimiter?: Options["paths"]
+    rateLimits?: Options["paths"];
   }
 }
 
+export interface ExtendedRateLimiterSettings extends RateLimitSettings {
+  StoreFactory?: new (...args: ConstructorParameters<typeof ExtendedRateLimitStore>) => ExtendedRateLimitStore;
+  store?: ExtendedRateLimitStore;
+  apiService: string;
+  [key: string]: any;
+}
+
 interface Settings {
-  rateLimiter: {
-    rules: Options["paths"],
-    store: RateLimitStore
-  }
+  rateLimit: ExtendedRateLimiterSettings;
 }
 
 type Mixin = Partial<ServiceSchema<Settings>>;
@@ -42,15 +46,16 @@ export function KeyRateLimiter(opts?: Options): Mixin {
       }
   }
 
-  if (!opts?.store) throw new MoleculerError('No store defined for the rate limiter mixin.');
-
   const hookConstructor = (path: string) => {
     return async function(this: Mixin, ctx: Context<null, Meta>): Promise<void> {
-      const store = this.settings!.rateLimiter.store;
+      // If it’s not from the API, allow it.
+      if (ctx.caller != this.settings?.rateLimit?.apiService) return;
+      const store = this.rateLimitStore;
+      if (!store) throw new MoleculerError('No store defined for the rate limiter mixin.');
 
-      const limiters = this.settings!.rateLimiter.rules[path]!;
-      if (ctx.meta.authorizer.rateLimiter?.[path])
-        for (const limiter of ctx.meta.authorizer.rateLimiter[path]!) {
+      const limiters = rules[path]!;
+      if (ctx.meta.authorizer.rateLimits?.[path])
+        for (const limiter of ctx.meta.authorizer.rateLimits[path]!) {
           limiters.push(limiter);
         }
 
@@ -79,8 +84,13 @@ export function KeyRateLimiter(opts?: Options): Mixin {
         const key = objectHash(keyObject);
         const limit = limiter.timed ?? limiter.concurrent;
         const setExpire = limiter.timed ? true : false;
-        const counter = await this.store.inc(key, setExpire);
-        if (counter >= limit) throw new MoleculerClientError("Rate limit exceeded", 429);
+        const counter = await store.inc(key, setExpire);
+        if (counter >= limit) {
+          // If reached limit, we decrease it in case it’s concurrent, to allow a correct count (we always increase)
+          // at first)
+          if (!setExpire) store.dec(key);
+          throw new MoleculerClientError("Rate limit exceeded", 429);
+        }
       }
 
       return;
@@ -94,16 +104,27 @@ export function KeyRateLimiter(opts?: Options): Mixin {
     before[rule] = hookConstructor(rule);
   }
 
+  // Mixin to join with service definition.
   return {
     settings: {
-      rateLimiter: {
-        rules: rules,
-        store: opts.store
+      rateLimit: {
+        apiService: 'api',
       }
     },
 
     hooks: {
       before
     },
-  };
+
+    started(this: Mixin) {
+      const opts = this.settings?.rateLimit;
+      const Factory = opts!.StoreFactory ?? MemoryStore;
+      this.rateLimitStore = new Factory(
+        opts!.window ?? 0,
+        opts,
+        this.broker
+      );
+
+    }
+  }
 };

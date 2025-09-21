@@ -1,5 +1,4 @@
-/// <reference types="node" />
-import { RateLimitStore } from 'moleculer-web';
+import { ExtendedRateLimitStore } from './extended-rate-limit-store';
 import type { ServiceBroker } from 'moleculer';
 import type { RateLimitSettings } from 'moleculer-web';
 /**
@@ -7,20 +6,25 @@ import type { RateLimitSettings } from 'moleculer-web';
  *
  * @class MemoryStore
  */
-export declare class MemoryStore extends RateLimitStore {
-    hits: Map<string, number>;
-    timer: NodeJS.Timer;
+export declare class MemoryStore extends ExtendedRateLimitStore {
+    #private;
     /**
      * @inheritdoc
      */
     constructor(clearPeriod: number, opts?: RateLimitSettings, broker?: ServiceBroker | undefined);
     /**
-     * @inheritdoc
+     * Increment the counter by key
+     * @param {String} key
+     * @param {boolean} setExpire - Whether the key should automatically expire based on the set window
+     * @returns {Number}
+     * @memberof MemoryStore
      */
-    inc(key: string): number;
+    inc(key: string, setExpire?: true): Promise<number>;
     /**
      * Decrement the counter by key
      *
+     * @param {String} key
+     * @returns {Number}
      * @memberof MemoryStore
      */
     dec(key: string): number;

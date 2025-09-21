@@ -1,5 +1,6 @@
 import { ServiceSchema } from 'moleculer';
-import type { RateLimitStore } from 'moleculer-web';
+import { ExtendedRateLimitStore } from '../stores/extended-rate-limit-store';
+import type { RateLimitSettings } from 'moleculer-web';
 type Without<T, U> = {
     [P in Exclude<keyof T, keyof U>]?: never;
 };
@@ -13,13 +14,15 @@ export type LimiterPath = XOR<{
 }>;
 export interface Options {
     paths: Record<string, Array<LimiterPath> | undefined>;
-    store: RateLimitStore;
+}
+export interface ExtendedRateLimiterSettings extends RateLimitSettings {
+    StoreFactory?: new (...args: ConstructorParameters<typeof ExtendedRateLimitStore>) => ExtendedRateLimitStore;
+    store?: ExtendedRateLimitStore;
+    apiService: string;
+    [key: string]: any;
 }
 interface Settings {
-    rateLimiter: {
-        rules: Options["paths"];
-        store: RateLimitStore;
-    };
+    rateLimit: ExtendedRateLimiterSettings;
 }
 type Mixin = Partial<ServiceSchema<Settings>>;
 export declare function KeyRateLimiter(opts?: Options): Mixin;

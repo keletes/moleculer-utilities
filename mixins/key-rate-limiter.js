@@ -5,6 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.KeyRateLimiter = void 0;
 const moleculer_1 = require("moleculer");
+const memory_store_1 = require("../stores/memory-store");
 const { MoleculerClientError, MoleculerError } = moleculer_1.Errors;
 const object_hash_1 = __importDefault(require("object-hash"));
 function KeyRateLimiter(opts) {
@@ -17,14 +18,17 @@ function KeyRateLimiter(opts) {
                 rules[path].push(opt);
             }
     }
-    if (!opts?.store)
-        throw new MoleculerError('No store defined for the rate limiter mixin.');
     const hookConstructor = (path) => {
         return async function (ctx) {
-            const store = this.settings.rateLimiter.store;
-            const limiters = this.settings.rateLimiter.rules[path];
-            if (ctx.meta.authorizer.rateLimiter?.[path])
-                for (const limiter of ctx.meta.authorizer.rateLimiter[path]) {
+            // If it’s not from the API, allow it.
+            if (ctx.caller != this.settings?.rateLimit?.apiService)
+                return;
+            const store = this.rateLimitStore;
+            if (!store)
+                throw new MoleculerError('No store defined for the rate limiter mixin.');
+            const limiters = rules[path];
+            if (ctx.meta.authorizer.rateLimits?.[path])
+                for (const limiter of ctx.meta.authorizer.rateLimits[path]) {
                     limiters.push(limiter);
                 }
             // If no rate limit is set for this path, allow.
@@ -51,9 +55,14 @@ function KeyRateLimiter(opts) {
                 const key = (0, object_hash_1.default)(keyObject);
                 const limit = limiter.timed ?? limiter.concurrent;
                 const setExpire = limiter.timed ? true : false;
-                const counter = await this.store.inc(key, setExpire);
-                if (counter >= limit)
+                const counter = await store.inc(key, setExpire);
+                if (counter >= limit) {
+                    // If reached limit, we decrease it in case it’s concurrent, to allow a correct count (we always increase)
+                    // at first)
+                    if (!setExpire)
+                        store.dec(key);
                     throw new MoleculerClientError("Rate limit exceeded", 429);
+                }
             }
             return;
         };
@@ -62,16 +71,21 @@ function KeyRateLimiter(opts) {
     for (const rule in rules) {
         before[rule] = hookConstructor(rule);
     }
+    // Mixin to join with service definition.
     return {
         settings: {
-            rateLimiter: {
-                rules: rules,
-                store: opts.store
+            rateLimit: {
+                apiService: 'api',
             }
         },
         hooks: {
             before
         },
+        started() {
+            const opts = this.settings?.rateLimit;
+            const Factory = opts.StoreFactory ?? memory_store_1.MemoryStore;
+            this.rateLimitStore = new Factory(opts.window ?? 0, opts, this.broker);
+        }
     };
 }
 exports.KeyRateLimiter = KeyRateLimiter;

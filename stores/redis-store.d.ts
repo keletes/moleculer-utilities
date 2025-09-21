@@ -1,4 +1,4 @@
-import { RateLimitStore } from 'moleculer-web';
+import { ExtendedRateLimitStore } from './extended-rate-limit-store';
 import type { ServiceBroker } from 'moleculer';
 import type { RateLimitSettings } from 'moleculer-web';
 import type { RedisClientType } from 'redis';
@@ -11,10 +11,8 @@ interface RedisRateLimitSettings extends RateLimitSettings {
  *
  * @class MemoryStore
  */
-export declare class RedisStore extends RateLimitStore {
-    client: RedisClientType;
-    clearPeriod: number;
-    prefix: string;
+export declare class RedisStore extends ExtendedRateLimitStore {
+    #private;
     /**
      * @inheritdoc
      */
