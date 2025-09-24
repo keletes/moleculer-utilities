@@ -45,8 +45,8 @@ export class RedisStore extends ExtendedRateLimitStore {
 	 */
 	async inc(key: string, setExpire = true): Promise<number> {
 		key = this.#getFullKey(key);
-		const counter = this.#client.incr(key);
-		if (setExpire)
+		const counter = await this.#client.incr(key);
+		if (setExpire && counter === 1)
 			this.#client.expire(
 				key,
 				this.#clearPeriod / 1000,

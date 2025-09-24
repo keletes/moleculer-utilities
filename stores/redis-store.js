@@ -49,8 +49,8 @@ class RedisStore extends extended_rate_limit_store_1.ExtendedRateLimitStore {
      */
     async inc(key, setExpire = true) {
         key = __classPrivateFieldGet(this, _RedisStore_instances, "m", _RedisStore_getFullKey).call(this, key);
-        const counter = __classPrivateFieldGet(this, _RedisStore_client, "f").incr(key);
-        if (setExpire)
+        const counter = await __classPrivateFieldGet(this, _RedisStore_client, "f").incr(key);
+        if (setExpire && counter === 1)
             __classPrivateFieldGet(this, _RedisStore_client, "f").expire(key, __classPrivateFieldGet(this, _RedisStore_clearPeriod, "f") / 1000);
         return counter;
     }
