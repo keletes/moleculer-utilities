@@ -11,7 +11,7 @@ const lodash_isarray_1 = __importDefault(require("lodash.isarray"));
 const lodash_isobject_1 = __importDefault(require("lodash.isobject"));
 const lodash_isstring_1 = __importDefault(require("lodash.isstring"));
 // @ts-ignore
-const utils_1 = require("moleculer-web/utils");
+const utils_js_1 = require("../utils.js");
 const { ServiceNotFoundError } = moleculer_1.Errors;
 function getServiceFullname(svc) {
     if (svc.version != null && svc.settings.$noVersionPrefix !== true)
@@ -118,7 +118,7 @@ function KeyRateLimiter(opts) {
                 if (processedServices.has(serviceName))
                     return;
                 for (let basePath of basePaths) {
-                    basePath = (0, utils_1.addSlashes)((0, lodash_isstring_1.default)(basePath) ? basePath : serviceName.replace(SLASH_REGEX, "/"));
+                    basePath = (0, utils_js_1.addSlashes)((0, lodash_isstring_1.default)(basePath) ? basePath : serviceName.replace(SLASH_REGEX, "/"));
                     (0, lodash_forin_1.default)(service.actions, (action) => {
                         if (action.rest) {
                             // Check visibility
@@ -152,7 +152,7 @@ function KeyRateLimiter(opts) {
                                     alias = this.parseActionRestObject(restRoute, action.rawName, basePath);
                                 }
                                 if (alias) {
-                                    alias.path = (0, utils_1.removeTrailingSlashes)((0, utils_1.normalizePath)(alias.path));
+                                    alias.path = (0, utils_js_1.removeTrailingSlashes)((0, utils_js_1.normalizePath)(alias.path));
                                     alias._generated = true;
                                     this.aliases.push(this.createAlias(route, alias, action.name));
                                 }

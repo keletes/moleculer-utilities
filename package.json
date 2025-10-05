@@ -1,9 +1,9 @@
 {
   "name": "moleculer-utilities",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "main": "index.js",
   "scripts": {
-    "prepublish": "rm -Rf ./middlewares && rm -Rf ./mixins && rm -Rf ./stores && ttsc",
+    "prepublish": "cp ./node_modules/moleculer-web/src/utils.js ./utils.js && rm -Rf ./middlewares && rm -Rf ./mixins && rm -Rf ./stores && ttsc",
     "pretest": "ttsc",
     "test": "ttsc --project tsconfig.test.json && jest --coverage"
   },
