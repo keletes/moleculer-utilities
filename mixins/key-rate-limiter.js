@@ -11,7 +11,7 @@ const lodash_isarray_1 = __importDefault(require("lodash.isarray"));
 const lodash_isobject_1 = __importDefault(require("lodash.isobject"));
 const lodash_isstring_1 = __importDefault(require("lodash.isstring"));
 // @ts-ignore
-const utils_js_1 = require("../utils.js");
+const utils_js_1 = require("../utils/utils.js");
 const { ServiceNotFoundError } = moleculer_1.Errors;
 function getServiceFullname(svc) {
     if (svc.version != null && svc.settings.$noVersionPrefix !== true)

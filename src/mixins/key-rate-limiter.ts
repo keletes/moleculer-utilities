@@ -12,7 +12,7 @@ import isObject from 'lodash.isobject';
 import isString from 'lodash.isstring';
 
 // @ts-ignore
-import { removeTrailingSlashes, addSlashes, normalizePath } from '../utils.js';
+import { removeTrailingSlashes, addSlashes, normalizePath } from '../utils/utils.js';
 
 const { ServiceNotFoundError } = Errors;
 
