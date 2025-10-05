@@ -1,11 +1,21 @@
-import { Context, Errors, ServiceSchema } from 'moleculer';
+import { Context, Errors, ActionSchema, ServiceSchema } from 'moleculer';
 import { ExtendedRateLimitStore } from '../stores/extended-rate-limit-store';
-import { MemoryStore } from '../stores/memory-store';
-import type { RateLimitSettings } from 'moleculer-web';
+import type ApiGatewayService from 'moleculer-web';
+import type { Alias, RateLimitSettings, Route } from 'moleculer-web';
 const { MoleculerClientError, MoleculerError } = Errors;
-import type { ServiceHooksBefore } from 'moleculer';
+import type { Service, ServiceHooksBefore } from 'moleculer';
 import objectHash from 'object-hash';
+import forIn from 'lodash.forin';
+import isArray from 'lodash.isarray';
 import isEqual from 'lodash.isequal';
+import isObject from 'lodash.isobject';
+import isString from 'lodash.isstring';
+
+// @ts-ignore
+import { removeTrailingSlashes, addSlashes, normalizePath } from 'moleculer-web/utils';
+
+const { ServiceNotFoundError } = Errors;
+
 
 // XOR Type from https://medium.com/@aeron169/building-a-xor-type-in-typescript-5f4f7e709a9d
 type Without<T, U> = { [P in Exclude<keyof T, keyof U>]?: never };
@@ -37,8 +47,17 @@ interface Settings {
 
 type Mixin = Partial<ServiceSchema<Settings>>;
 
+function getServiceFullname(svc: Service) {
+  if (svc.version != null && svc.settings.$noVersionPrefix !== true)
+    return (typeof (svc.version) == "number" ? "v" + svc.version : svc.version) + "." + svc.name;
+
+  return svc.name;
+}
+
+const SLASH_REGEX = new RegExp(/\./g);
+
 export function KeyRateLimiter(opts?: Options): Mixin {
-  const rules: Options["paths"] = {'*': undefined};
+  /*const rules: Options["paths"] = {'*': undefined};
   for (const path in opts?.paths) {
     if (!rules[path]) rules[path] = [];
     if (opts?.paths[path])
@@ -50,7 +69,6 @@ export function KeyRateLimiter(opts?: Options): Mixin {
   const hookConstructor = (path: string) => {
     return async function(this: Mixin, ctx: Context<null, Meta>): Promise<void> {
       // If it’s not from the API, allow it.
-      if (ctx.caller != this.settings?.rateLimit?.apiService) return;
       const store = this.rateLimitStore;
       if (!store) throw new MoleculerError('No store defined for the rate limiter mixin.');
 
@@ -105,29 +123,97 @@ export function KeyRateLimiter(opts?: Options): Mixin {
 
   for (const rule in rules) {
     before[rule] = hookConstructor(rule);
-  }
+  }*/
 
   // Mixin to join with service definition.
   return {
-    settings: {
-      rateLimit: {
-        apiService: 'api',
+
+    /**
+     * Regenerate aliases automatically if service registry has been changed.
+     *
+     * @param {Route} route
+     */
+    regenerateAutoAliases(this: typeof ApiGatewayService, route: Route) {
+      this.logRouteRegistration(`♻ Generate aliases for '${route.path}' route...`);
+
+      // Clean previous aliases for this route
+      this.aliases = this.aliases.filter((alias: Alias) => alias.route != route || !alias._generated);
+
+      const processedServices = new Set();
+
+      const services = this.broker.registry.getServiceList({ withActions: true, grouping: true });
+      services.forEach((service: Service) => {
+        if(!service.settings) return;
+        const serviceName = service.fullName || getServiceFullname(service);
+
+        let basePaths = [];
+        if (isString(service.settings.rest)) {
+          basePaths = [service.settings.rest];
+        } else if (isArray(service.settings.rest)) {
+          basePaths = service.settings.rest;
+        } else {
+          basePaths = [serviceName.replace(SLASH_REGEX, "/")];
+        }
+
+        // Skip multiple instances of services
+        if (processedServices.has(serviceName)) return;
+
+        for (let basePath of basePaths) {
+          basePath = addSlashes(isString(basePath) ? basePath : serviceName.replace(SLASH_REGEX, "/"));
+
+          forIn(service.actions, (action: ActionSchema) => {
+            if (action.rest) {
+              // Check visibility
+              if (action.visibility != null && action.visibility != "published") return;
+
+              // Check whitelist
+              if (route.hasWhitelist && !this.checkWhitelist(route, action.name)) return;
+
+              // Blacklist check
+              if (route.hasBlacklist) {
+                if (this.checkBlacklist(route, action.name)) {
+                  this.logger.debug(
+                    `  The '${action.name}' action is in the blacklist!`
+                  );
+                  throw new ServiceNotFoundError({
+                    action: action.name,
+                  });
+                }
+              }
+
+              let restRoutes = [];
+              if (!isArray(action.rest)) {
+                restRoutes = [action.rest];
+              } else {
+                restRoutes = action.rest;
+              }
+
+              for (let restRoute of restRoutes) {
+                let alias = null;
+
+                if (isString(restRoute)) {
+                  alias = this.parseActionRestString(restRoute, basePath);
+                } else if (isObject(restRoute)) {
+                  alias = this.parseActionRestObject(restRoute, action.rawName, basePath);
+                }
+
+                if (alias) {
+                  alias.path = removeTrailingSlashes(normalizePath(alias.path));
+                  alias._generated = true;
+                  this.aliases.push(this.createAlias(route, alias, action.name));
+                }
+              }
+            }
+
+            processedServices.add(serviceName);
+          });
+        }
+      });
+
+      if (this.settings?.optimizeOrder) {
+        this.optimizeAliasesOrder();
       }
     },
 
-    hooks: {
-      before
-    },
-
-    started(this: Mixin) {
-      const opts = this.settings?.rateLimit;
-      const Factory = opts!.StoreFactory ?? MemoryStore;
-      this.rateLimitStore = new Factory(
-        opts!.window ?? 0,
-        opts,
-        this.broker
-      );
-
-    }
   }
 };
