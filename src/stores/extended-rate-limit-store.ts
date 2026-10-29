@@ -1,5 +1,5 @@
-import type { RateLimitSettings } from 'moleculer-web';
-import type { ServiceBroker } from 'moleculer';
+import type { RateLimitSettings } from "moleculer-web";
+import type { ServiceBroker } from "moleculer";
 
 export abstract class ExtendedRateLimitStore {
 	resetTime: number;
