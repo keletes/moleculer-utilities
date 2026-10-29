@@ -7,7 +7,7 @@ Shared Moleculer mixins, middlewares and rate-limit stores of the Keletes servic
 ```
 
 ```ts
-import { Authorizer, KeyRateLimiter } from "moleculer-utilities/mixins";
+import { Authorizer, Docs, KeyRateLimiter } from "moleculer-utilities/mixins";
 import { InterNamespace, K8sHealthCheck } from "moleculer-utilities/middlewares";
 import { MemoryStore, RedisStore } from "moleculer-utilities/stores";
 ```

@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 describe("built package layout", () => {
 	it.each([
-		["mixins", ["Authorizer", "KeyRateLimiter"]],
+		["mixins", ["Authorizer", "Docs", "KeyRateLimiter"]],
 		["middlewares", ["InterNamespace", "K8sHealthCheck"]],
 		["stores", ["MemoryStore", "RedisStore"]],
 	])("%s exports its public names", (folder, names) => {
