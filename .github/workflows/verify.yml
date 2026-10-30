@@ -1,8 +1,8 @@
 name: Verify
 
-# PR gate for master. Required status checks (branch protection): `verify`, `test`.
-#   - verify : typecheck, lint, build, critical-advisory audit
-#   - test   : build, then jest against the built package layout (consumers import moleculer-utilities/mixins ...)
+# PR gate for master. Required status check (branch protection): `verify`, one job like the other repos.
+#   typecheck, lint, build, jest against the built package layout (consumers import moleculer-utilities/mixins ...),
+#   critical-advisory audit
 
 on:
   pull_request:
@@ -41,6 +41,9 @@ jobs:
       - name: Build
         run: yarn build
 
+      - name: Test
+        run: yarn test
+
       - name: Security audit (fail on critical)
         run: |
           report=$(yarn audit --json --groups dependencies || true)
@@ -56,19 +59,3 @@ jobs:
             exit 1
           fi
           echo "No critical advisories."
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: yarn
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Test
-        run: yarn test
