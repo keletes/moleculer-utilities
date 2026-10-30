@@ -1,6 +1,6 @@
 # moleculer-utilities
 
-Shared Moleculer pieces for the Keletes services, imported by subpath: `moleculer-utilities/mixins` (`Authorizer`, `KeyRateLimiter`), `/middlewares` (`InterNamespace`, `K8sHealthCheck`) and `/stores` (`MemoryStore`, `RedisStore`, for the rate limiter). Public repo: nothing specific to a service, no secret, no hostname.
+Shared Moleculer pieces for the Keletes services, imported by subpath: `moleculer-utilities/mixins` (`Authorizer`, `Docs`, `KeyRateLimiter`), `/middlewares` (`InterNamespace`, `K8sHealthCheck`) and `/stores` (`MemoryStore`, `RedisStore`, for the rate limiter). Public repo: nothing specific to a service, no secret, no hostname.
 
 ## Commands
 
@@ -9,6 +9,10 @@ yarn verify    # typecheck + lint + test
 yarn build     # tsc -> mixins/, middlewares/, stores/, utils/ at the package root
 yarn test      # builds first, then jest (the layout spec imports the built folders)
 ```
+
+## The `Docs` mixin
+
+`Docs({ dir, version })` (`src/mixins/docs.ts`) serves a folder of markdown (front matter `title` + `summary`, topic id = path without `.md`) as the authoring documentation of a service: `docs.list` (`{version, topics:[{id,title,summary,hash}]}`) and `docs.get({topic})`, and the same index in `metadata.docs` (the texts never go into metadata: it travels in every node's info). A malformed file throws in `created()`, so a broken doc stops the service. Actions are `public` (reachable from other namespaces), never have a `rest` alias, and are not covered by `Authorizer` unless the service whitelists them.
 
 ## Shape of this repo
 
