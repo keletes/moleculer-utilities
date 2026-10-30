@@ -1,7 +1,7 @@
-import { ServiceBroker, ServiceSchema } from 'moleculer';
-import defaultsDeep from 'lodash.defaultsdeep';
-import {createServer, STATUS_CODES} from 'http';
-import type {Server, IncomingMessage, ServerResponse} from 'http';
+import { ServiceBroker, ServiceSchema } from "moleculer";
+import defaultsDeep from "lodash.defaultsdeep";
+import {createServer, STATUS_CODES} from "http";
+import type {Server, IncomingMessage, ServerResponse} from "http";
 
 interface Options {
   readiness: {
@@ -13,88 +13,88 @@ interface Options {
   port: string
 }
 
-export default function K8sMiddleware(opts?: Options): Omit<ServiceSchema, 'name'> {
-  const options = defaultsDeep(opts, {
-    port: 3001,
-    readiness: {
-      path: "/ready",
-    },
-    liveness: {
-      path: "/live",
-    },
-  }) as Options;
+export default function K8sMiddleware(opts?: Options): Omit<ServiceSchema, "name"> {
+	const options = defaultsDeep(opts, {
+		port: 3001,
+		readiness: {
+			path: "/ready",
+		},
+		liveness: {
+			path: "/live",
+		},
+	}) as Options;
 
-  let state = "down";
-  let server: Server;
+	let state = "down";
+	let server: Server;
 
-  function handler(req: IncomingMessage, res: ServerResponse) {
-    if (req.url == options.readiness.path || req.url == options.liveness.path) {
-      const resHeader = {
-        "Content-Type": "application/json; charset=utf-8",
-      };
+	function handler(req: IncomingMessage, res: ServerResponse) {
+		if (req.url == options.readiness.path || req.url == options.liveness.path) {
+			const resHeader = {
+				"Content-Type": "application/json; charset=utf-8",
+			};
 
-      const content = {
-        state,
-        uptime: process.uptime(),
-        timestamp: Date.now(),
-      };
+			const content = {
+				state,
+				uptime: process.uptime(),
+				timestamp: Date.now(),
+			};
 
-      if (req.url == options.readiness.path) {
-        // Readiness if the broker started successfully.
-        // https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
-        res.writeHead(state == "up" ? 200 : 503, resHeader);
-      } else {
-        // Liveness if the broker is not stopped.
-        // https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
-        res.writeHead(state != "down" ? 200 : 503, resHeader);
-      }
+			if (req.url == options.readiness.path) {
+				// Readiness if the broker started successfully.
+				// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-readiness-probes
+				res.writeHead(state == "up" ? 200 : 503, resHeader);
+			} else {
+				// Liveness if the broker is not stopped.
+				// https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/#define-a-liveness-command
+				res.writeHead(state != "down" ? 200 : 503, resHeader);
+			}
 
-      res.end(JSON.stringify(content, null, 2));
-    } else {
-      res.writeHead(404, STATUS_CODES[404], {});
-      res.end();
-    }
-  }
+			res.end(JSON.stringify(content, null, 2));
+		} else {
+			res.writeHead(404, STATUS_CODES[404], {});
+			res.end();
+		}
+	}
 
-  return {
-    created(broker: ServiceBroker) {
-      state = "starting";
+	return {
+		created(broker: ServiceBroker) {
+			state = "starting";
 
-      server = createServer(handler);
-      server.listen(options.port, (err?: Error) => {
-        if (err) {
-          return broker.logger.error(
-            "Unable to start health-check server",
-            err
-          );
-        }
+			server = createServer(handler);
+			server.listen(options.port, (err?: Error) => {
+				if (err) {
+					return broker.logger.error(
+						"Unable to start health-check server",
+						err
+					);
+				}
 
-        broker.logger.info("");
-        broker.logger.info("K8s health-check server listening on");
-        broker.logger.info(
-          `    http://localhost:${options.port}${options.readiness.path}`
-        );
-        broker.logger.info(
-          `    http://localhost:${options.port}${options.liveness.path}`
-        );
-        broker.logger.info("");
-      });
-    },
+				broker.logger.info("");
+				broker.logger.info("K8s health-check server listening on");
+				broker.logger.info(
+					`    http://localhost:${options.port}${options.readiness.path}`
+				);
+				broker.logger.info(
+					`    http://localhost:${options.port}${options.liveness.path}`
+				);
+				broker.logger.info("");
+			});
+		},
 
-    // After broker started
-    started() {
-      state = "up";
-    },
+		// After broker started
+		started() {
+			state = "up";
+		},
 
-    // Before broker stopping
-    stopping() {
-      state = "stopping";
-    },
+		// Before broker stopping
+		stopping() {
+			state = "stopping";
+		},
 
-    // After broker stopped
-    stopped() {
-      state = "down";
-      server.close();
-    },
-  };
-};
+		// After broker stopped
+		stopped() {
+			state = "down";
+			server.close();
+		},
+	};
+}

@@ -1,8 +1,8 @@
-import { ExtendedRateLimitStore } from './extended-rate-limit-store';
-import { Errors } from 'moleculer';
-import type { ServiceBroker } from 'moleculer';
-import type { RateLimitSettings } from 'moleculer-web';
-import type { RedisClientType } from 'redis';
+import { ExtendedRateLimitStore } from "./extended-rate-limit-store";
+import { Errors } from "moleculer";
+import type { ServiceBroker } from "moleculer";
+import type { RateLimitSettings } from "moleculer-web";
+import type { RedisClientType } from "redis";
 
 const MoleculerError = Errors.MoleculerError;
 
@@ -30,9 +30,9 @@ export class RedisStore extends ExtendedRateLimitStore {
 		this.#clearPeriod = clearPeriod;
 		if (opts?.client) {
 			this.#client = opts?.client;
-			this.#prefix = opts?.prefix ?? '';
+			this.#prefix = opts?.prefix ?? "";
 		} else {
-			throw new MoleculerError('No Redis client defined in rate limiter options.');
+			throw new MoleculerError("No Redis client defined in rate limiter options.");
 		}
 	}
 
@@ -43,7 +43,7 @@ export class RedisStore extends ExtendedRateLimitStore {
 	 * @returns {Number}
 	 * @memberof MemoryStore
 	 */
-	async inc(key: string, setExpire = true): Promise<number> {
+	override async inc(key: string, setExpire = true): Promise<number> {
 		key = this.#getFullKey(key);
 		const counter = await this.#client.incr(key);
 		if (setExpire && counter === 1)

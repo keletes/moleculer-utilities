@@ -1,6 +1,6 @@
-import { ExtendedRateLimitStore } from './extended-rate-limit-store';
-import type { ServiceBroker } from 'moleculer';
-import type { RateLimitSettings } from 'moleculer-web';
+import { ExtendedRateLimitStore } from "./extended-rate-limit-store";
+import type { ServiceBroker } from "moleculer";
+import type { RateLimitSettings } from "moleculer-web";
 
 /**
  * Improved memory store for Rate limiter
@@ -34,7 +34,7 @@ export class MemoryStore extends ExtendedRateLimitStore {
 	 * @returns {Number}
 	 * @memberof MemoryStore
 	 */
-	async inc(key: string, setExpire?: true): Promise<number> {
+	override async inc(key: string, setExpire?: true): Promise<number> {
 		let counter = this.#hits.get(key) || 0;
 		counter++;
 		this.#hits.set(key, counter);

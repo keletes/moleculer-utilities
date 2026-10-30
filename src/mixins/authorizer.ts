@@ -1,11 +1,11 @@
-import { Context, Errors, ServiceSchema } from 'moleculer';
+import { Context, Errors, ServiceSchema } from "moleculer";
 const {MoleculerError} = Errors;
 
 interface Options {
   whitelist?: string[]
 }
 
-type Schema = Omit<ServiceSchema<Settings>, 'name'>;
+type Schema = Omit<ServiceSchema<Settings>, "name">;
 
 interface Meta {
   authorizer: {
@@ -20,33 +20,33 @@ interface Settings {
 }
 
 export default function Authorizer(opts?: Options): Schema {
-  return {
-    settings: {
-      authorizer: opts
-    },
+	return {
+		settings: {
+			authorizer: opts
+		},
 
-    hooks: {
-      before: {
-        "*": async function (this: Schema, ctx: Context<null, Meta>) {
-          const action = `${ctx.action?.service?.name}.${ctx.action?.rawName}`;
-          if (
-            this.settings?.authorizer?.whitelist?.indexOf?.(action) >
+		hooks: {
+			before: {
+				"*": async function (this: Schema, ctx: Context<null, Meta>) {
+					const action = `${ctx.action?.service?.name}.${ctx.action?.rawName}`;
+					if (
+						this.settings?.authorizer?.whitelist?.indexOf?.(action) >
             -1
-          )
-            return;
+					)
+						return;
 
-          const authorizer = ctx.meta.authorizer;
+					const authorizer = ctx.meta.authorizer;
 
-          // If unauthenticated or unauthorized, return 403
-          if (authorizer?.actions?.indexOf?.(action) >= 0)
-            return;
-          throw new MoleculerError(
-            "Action not authorized.",
-            403,
-            "E_NOT_AUTHORIZED"
-          );
-        },
-      },
-    },
-  };
-};
+					// If unauthenticated or unauthorized, return 403
+					if (authorizer?.actions?.indexOf?.(action) >= 0)
+						return;
+					throw new MoleculerError(
+						"Action not authorized.",
+						403,
+						"E_NOT_AUTHORIZED"
+					);
+				},
+			},
+		},
+	};
+}

@@ -2,19 +2,20 @@
 	"compilerOptions": {
 		"target": "es2021",
 		"module": "commonjs",
-		"rootDir": "src",
-		"outDir": ".",
-		"strict": true,
 		"moduleResolution": "node",
-		"noEmitOnError": true,
+		"lib": ["es2022"],
+		"strict": true,
+		"noImplicitOverride": true,
 		"noImplicitReturns": true,
 		"noFallthroughCasesInSwitch": true,
-		"esModuleInterop": true,
 		"declaration": true,
-		"resolveJsonModule": true,
-		"skipLibCheck": true
+		"outDir": ".",
+		"rootDir": "./",
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"skipLibCheck": true,
+		"types": ["node", "jest"]
 	},
-	"exclude": [
-		"node_modules"
-	]
+	"include": ["src/**/*", "test/**/*"],
+	"exclude": ["node_modules"]
 }

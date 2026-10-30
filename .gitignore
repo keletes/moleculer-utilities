@@ -62,3 +62,10 @@ typings/
 
 # Nova files
 .nova
+# Built by `yarn build` into the package root (consumers import moleculer-utilities/mixins, /middlewares and
+# /stores); committed only by the release commit (see .releaserc.json), which force-adds it.
+/mixins/
+/middlewares/
+/stores/
+/utils/
+/coverage/
