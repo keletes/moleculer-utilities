@@ -1,6 +1,6 @@
 {
 	"name": "moleculer-utilities",
-	"version": "0.5.2",
+	"version": "0.6.0",
 	"scripts": {
 		"build": "rm -rf mixins middlewares stores utils && tsc --project tsconfig.build.json",
 		"typecheck": "tsc --noEmit",
