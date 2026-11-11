@@ -1,7 +1,7 @@
 name: Verify
 
 # PR gate for master. Required status check (branch protection): `verify`, one job like the other repos.
-#   typecheck, lint, build, jest against the built package layout (consumers import moleculer-utilities/mixins ...),
+#   typecheck, lint, build, jest against the built package layout (consumers import @keletes/moleculer-utilities/mixins ...),
 #   critical-advisory audit
 
 on:
