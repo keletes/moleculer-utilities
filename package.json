@@ -1,6 +1,15 @@
 {
-	"name": "moleculer-utilities",
-	"version": "0.6.0",
+	"name": "@keletes/moleculer-utilities",
+	"version": "0.0.0-development",
+	"files": [
+		"mixins",
+		"middlewares",
+		"stores",
+		"utils"
+	],
+	"publishConfig": {
+		"registry": "https://npm.pkg.github.com"
+	},
 	"scripts": {
 		"build": "rm -rf mixins middlewares stores utils && tsc --project tsconfig.build.json",
 		"typecheck": "tsc --noEmit",
@@ -8,13 +17,15 @@
 		"test": "yarn build && jest --coverage",
 		"verify": "yarn typecheck && yarn lint && yarn test"
 	},
-	"repository": "git@github.com:keletes/moleculer-utilities.git",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/keletes/moleculer-utilities.git"
+	},
 	"author": "Keletes <it@keletes.com>",
 	"license": "MIT",
 	"devDependencies": {
 		"@semantic-release/commit-analyzer": "^13.0.1",
 		"@semantic-release/exec": "^6.0.3",
-		"@semantic-release/git": "^11.0.1",
 		"@semantic-release/github": "^12.0.9",
 		"@semantic-release/npm": "^13.1.5",
 		"@semantic-release/release-notes-generator": "^14.1.1",

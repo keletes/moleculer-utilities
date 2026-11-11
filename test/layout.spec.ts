@@ -1,4 +1,4 @@
-// The package is installed from a git tag and imported by subpath (moleculer-utilities/mixins ...): the
+// The package is installed from GitHub Packages and imported by subpath (@keletes/moleculer-utilities/mixins ...): the
 // built folders at the package root are its public surface, so they are what this checks.
 /* eslint-disable @typescript-eslint/no-var-requires */
 describe("built package layout", () => {
