@@ -12,4 +12,6 @@ import { InterNamespace, K8sHealthCheck } from "@keletes/moleculer-utilities/mid
 import { MemoryStore, RedisStore } from "@keletes/moleculer-utilities/stores";
 ```
 
+`Authorizer({ whitelist, implies })`: `implies` maps an action to the permission(s) that also allow it, e.g. `{ "drawer.jobStatus": "drawer.draw", "drawer.jobResult": ["drawer.draw", "drawer.view"] }` (any one suffices). One level only: no transitive chains.
+
 Install a release tag, not a branch: the compiled files are only in the release commits. See `CLAUDE.md` for development.
