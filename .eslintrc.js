@@ -8,7 +8,7 @@ module.exports = {
 		jest: true,
 		jasmine: true,
 	},
-	ignorePatterns: ["/coverage", "/mixins", "/middlewares", "/stores", "/utils", "node_modules", "tmp", ".yalc", "*.d.ts"],
+	ignorePatterns: ["/coverage", "/mixins", "/middlewares", "/limits", "/utils", "node_modules", "tmp", ".yalc", "*.d.ts"],
 	parser: "@typescript-eslint/parser",
 	plugins: ["@typescript-eslint"],
 	extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],

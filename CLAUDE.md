@@ -1,13 +1,14 @@
 # @keletes/moleculer-utilities
 
-Shared Moleculer pieces for the Keletes services, published to GitHub Packages as `@keletes/moleculer-utilities` and imported by subpath: `@keletes/moleculer-utilities/mixins` (`Authorizer`, `Docs`, `KeyRateLimiter`), `/middlewares` (`InterNamespace`, `K8sHealthCheck`) and `/stores` (`MemoryStore`, `RedisStore`, for the rate limiter). Public repo: nothing specific to a service, no secret, no hostname.
+Shared Moleculer pieces for the Keletes services, published to GitHub Packages as `@keletes/moleculer-utilities` and imported by subpath: `@keletes/moleculer-utilities/mixins` (`Authorizer`, `Docs`), `/middlewares` (`InterNamespace`, `K8sHealthCheck`) and `/limits` (`Limits`, `LimitExceededError`, `RateLimitStore`, `clientIp`, `PodCpuUsage`, `BusyGuard`, the store adapters). `stores` and `KeyRateLimiter` were removed (0.x minor, by decision). Public repo: nothing specific to a service, no secret, no hostname.
 
 ## Commands
 
 ```
 yarn verify    # typecheck + lint + test
-yarn build     # tsc -> mixins/, middlewares/, stores/, utils/ at the package root
+yarn build     # tsc -> mixins/, middlewares/, limits/, utils/ at the package root
 yarn test      # builds first, then jest (the layout spec imports the built folders)
+REDIS_URL=redis://localhost:6379/15 yarn verify:int   # the store contract against a real Redis >= 7 (throwaway DB)
 ```
 
 ## The `Docs` mixin
@@ -19,6 +20,16 @@ yarn test      # builds first, then jest (the layout spec imports the built fold
 `Authorizer({ whitelist?, implies? })` (`src/mixins/authorizer.ts`, options type `AuthorizerOptions`) adds a `before "*"` hook: an action (`"<service>.<rawName>"`, unversioned) passes if it is in `whitelist`, then if `ctx.meta.authorizer.actions` lists it, then if that list holds a permission implied for it; otherwise 403 `E_NOT_AUTHORIZED`.
 
 `implies` maps the action being called to the permission(s) that also allow it (string or array, any one suffices): `Authorizer({ implies: { "drawer.jobStatus": "drawer.draw", "drawer.jobResult": ["drawer.draw", "drawer.view"] } })`. One level only, no transitive chains: write each chain out. It is normalised once at mixin creation and read with own-property lookups, so `__proto__`/`toString` keys grant nothing.
+
+## The `limits` subpath
+
+Plan: `Servizi/docs/plans/request-control.md`. Source in `src/limits/`.
+
+- **Stores** (`adapters/`): `resolveStore(config)` like Moleculer's `cacher` (`"Memory"`, `"redis://..."`, `{ type, options: { url | client, prefix } }`, `false`, a ready store). Interface `hit(key, perMinute, windowMs?)`, `acquire(key, cap, leaseId, ttlMs)`, `renew`, `release`, `start`, `stop`; all fail open (allow, warn at most every 10 s, `onError` for the `limits.store.errors` metric) and give up after 100 ms. Redis: no Lua, plain commands in `MULTI`, needs **Redis >= 7** (`PEXPIRE ... NX`), own client with the offline queue off, started in the background (`start()` never blocks). `hit` is a fixed window per key (refused hits count); `acquire` is an optimistic lease on a sorted set (never over-admits, a race for the last slot may refuse both). The adapter's `acquire` returns `retryAfterMs: 0`: the `concurrent` hint is the middleware's (`concurrentRetryAfter`, 5 s).
+- **`Limits({ store, service, defaults, mode })`** broker middleware (`localAction`): action schema `limits: { lease?: "call" | "stream" | "manual" }`. Reach the manual API as `this.broker.limits.check(ctx, "<service>.<action>", values)` and `.release(handles)` (the middleware sets `broker.limits` in `created`). A handle embeds the counter key and lease id, so any replica on the same store can release it. `service` names the default prefix `limits:<namespace>:<service>:` (pass it, or two services on one Redis share counters). Env: `LIMITS_STORE`, `LIMITS_MODE=enforce|shadow|off` (off: no store call, the store is not even started). Counters are `<access key id>:<action>:<hash of the rule>`; the raw key never enters a store key, an error or a log line. Rules: the key's `ctx.meta.authorizer.limits[action]` (any entry, even `[]`, replaces the defaults) else `defaults`; `params` is an AND subset match (`matchParams`), no operators.
+- **`RateLimitStore`**: a moleculer-web `rateLimit.StoreFactory`; `inc` throws `LimitExceededError` with the time left, swallows store errors. moleculer-web route settings are deep-cloned by Moleculer: give it a URL or `{ type: "Redis", options: { url } }` in `limitsStore`, never a live client object (it would be cloned, not shared).
+- **`PodCpuUsage`** replaces `broker.getCpuUsage` (max of the `os.cpus()` sample, cgroup v2 PSI `cpu.pressure` `some avg10`, `cpu.stat` throttling when `cpu.max` is set); **`BusyGuard`** (`busyGuard: true` on an action) refuses with `QueueIsFullError` while `broker.registry.nodes.localNode.cpu` is over `BUSY_CPU_PRESSURE`; user middlewares sit inside the internal bulkhead, so it runs after the bulkhead's slot is taken. It rejects the promise instead of throwing: a synchronous throw would escape `broker.call`.
+- Tests: `test/limits.spec.ts` runs one store contract (`test/helpers/store-suite.ts`) against Memory and Redis (`test/helpers/fake-redis.ts`, a `MULTI`-capable mock); `test/limits.redis.int.ts` runs the same contract on a real Redis.
 
 ## Shape of this repo
 
