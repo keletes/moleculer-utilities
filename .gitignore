@@ -63,9 +63,9 @@ typings/
 # Nova files
 .nova
 # Built by `yarn build` into the package root (consumers import @keletes/moleculer-utilities/mixins, /middlewares and
-# /stores); not tracked: the release builds it fresh and publishes it in the package.
+# /limits); not tracked: the release builds it fresh and publishes it in the package.
 /mixins/
 /middlewares/
-/stores/
+/limits/
 /utils/
 /coverage/

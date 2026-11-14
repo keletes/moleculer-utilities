@@ -3,11 +3,30 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 describe("built package layout", () => {
 	it.each([
-		["mixins", ["Authorizer", "Docs", "KeyRateLimiter"]],
+		["mixins", ["Authorizer", "Docs"]],
 		["middlewares", ["InterNamespace", "K8sHealthCheck"]],
-		["stores", ["MemoryStore", "RedisStore"]],
+		[
+			"limits",
+			[
+				"Limits",
+				"LimitExceededError",
+				"RateLimitStore",
+				"clientIp",
+				"PodCpuUsage",
+				"BusyGuard",
+				"resolveStore",
+				"MemoryAdapter",
+				"RedisAdapter",
+				"matchParams",
+			],
+		],
 	])("%s exports its public names", (folder, names) => {
 		const exported = require(`../${folder}`);
 		for (const name of names) expect(typeof exported[name]).toBe("function");
+	});
+
+	it("no longer ships the removed stores subpath nor KeyRateLimiter", () => {
+		expect(() => require("../stores")).toThrow();
+		expect(require("../mixins").KeyRateLimiter).toBeUndefined();
 	});
 });

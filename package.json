@@ -4,18 +4,19 @@
 	"files": [
 		"mixins",
 		"middlewares",
-		"stores",
+		"limits",
 		"utils"
 	],
 	"publishConfig": {
 		"registry": "https://npm.pkg.github.com"
 	},
 	"scripts": {
-		"build": "rm -rf mixins middlewares stores utils && tsc --project tsconfig.build.json",
+		"build": "rm -rf mixins middlewares limits utils && tsc --project tsconfig.build.json",
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint . --ext .ts,.js",
 		"test": "yarn build && jest --coverage",
-		"verify": "yarn typecheck && yarn lint && yarn test"
+		"verify": "yarn typecheck && yarn lint && yarn test",
+		"verify:int": "yarn build && jest --testMatch '**/*.int.ts' --coverage=false"
 	},
 	"repository": {
 		"type": "git",
@@ -60,14 +61,16 @@
 		"object-hash": "^3.0.0"
 	},
 	"peerDependencies": {
-		"moleculer": ">=0.14.0"
+		"moleculer": ">=0.14.0",
+		"redis": ">=4.0.0"
 	},
-	"description": "Shared Moleculer mixins, middlewares and rate-limit stores for the Keletes services",
+	"description": "Shared Moleculer mixins, middlewares and request limits for the Keletes services",
 	"keywords": [
 		"moleculer",
 		"mixin",
 		"middleware",
-		"rate-limit"
+		"rate-limit",
+		"limits"
 	],
 	"engines": {
 		"node": ">= 22.x.x"
@@ -89,5 +92,10 @@
 			"**/*.spec.ts"
 		],
 		"testTimeout": 30000
+	},
+	"peerDependenciesMeta": {
+		"redis": {
+			"optional": true
+		}
 	}
 }
