@@ -13,6 +13,7 @@ import {
 	RedisAdapter,
 	resolveStore,
 } from "../src/limits";
+import { maskIp } from "../src/limits/rate-limit-store";
 import type { AccessKeyLimits, StoreConfig } from "../src/limits";
 import { FakeRedis } from "./helpers/fake-redis";
 import { storeSuite } from "./helpers/store-suite";
@@ -718,6 +719,106 @@ describe("RateLimitStore with moleculer-web's built-in rateLimit", () => {
 		expect(ip("not-an-ip", "::ffff:5.5.5.5")).toBe("5.5.5.5");
 		expect(ip("junk", "also junk")).toBe("unknown");
 		expect(ip("junk-a")).toBe(ip("junk-b"));
+	});
+});
+
+describe("RateLimitStore modes", () => {
+	async function gateway(mode: string | undefined, extra: Record<string, unknown> = {}) {
+		const fake = new FakeRedis();
+		const logger = { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn(), trace: jest.fn(), fatal: jest.fn() };
+		const broker = new ServiceBroker({ logger: false, metrics: { enabled: true }, ...extra });
+		(broker as any).logger = { ...(broker as any).logger, ...logger };
+		const spy = jest.spyOn(broker.metrics, "increment");
+		broker.createService({ name: "ping", actions: { hello: () => "pong" } });
+		const gw = broker.createService({
+			name: "api",
+			mixins: [ApiGateway],
+			settings: {
+				port: 0,
+				routes: [
+					{
+						path: "/",
+						rateLimit: {
+							limit: 2,
+							window: 60_000,
+							key: clientIp,
+							StoreFactory: RateLimitStore,
+							limitsStore: { type: "Redis", options: { client: fake } },
+							...(mode ? { mode } : {}),
+						},
+						aliases: { "GET /ping": "ping.hello" },
+					},
+				],
+			},
+		});
+		await broker.start();
+		const port = (gw as any).server.address().port;
+		const get = async (ip: string) =>
+			(await fetch(`http://127.0.0.1:${port}/ping`, { headers: { "x-forwarded-for": ip } })).status;
+		return { broker, fake, logger, spy, get };
+	}
+
+	it("enforce (explicit) refuses over the limit", async () => {
+		const g = await gateway("enforce");
+		expect([await g.get("1.2.3.4"), await g.get("1.2.3.4"), await g.get("1.2.3.4")]).toEqual([200, 200, 429]);
+		expect(g.spy.mock.calls.filter((c) => c[0] === "limits.refused")).toHaveLength(0);
+		await g.broker.stop();
+	});
+
+	it("defaults to enforce, or to LIMITS_MODE when the option is absent", async () => {
+		let g = await gateway(undefined);
+		expect((await Promise.all([1, 2, 3].map(() => g.get("1.2.3.4")))).filter((s) => s === 429)).toHaveLength(1);
+		await g.broker.stop();
+		process.env.LIMITS_MODE = "off";
+		try {
+			g = await gateway(undefined);
+			expect(await g.get("1.2.3.4")).toBe(200);
+			expect(g.fake.data.size).toBe(0);
+			await g.broker.stop();
+		} finally {
+			delete process.env.LIMITS_MODE;
+		}
+	});
+
+	it("shadow counts, lets every request through, counts the metric and warns once per 10 s with a masked IP", async () => {
+		const g = await gateway("shadow");
+		const statuses: number[] = [];
+		for (let i = 0; i < 5; i++) statuses.push(await g.get("203.0.113.77"));
+		expect(statuses).toEqual([200, 200, 200, 200, 200]);
+		expect(g.fake.data.size).toBeGreaterThan(0);
+		const refused = g.spy.mock.calls.filter((c) => c[0] === "limits.refused");
+		expect(refused).toHaveLength(3);
+		expect(refused[0][1]).toEqual({ action: "ip", mode: "shadow" });
+		expect(g.logger.warn).toHaveBeenCalledTimes(1);
+		const line = String(g.logger.warn.mock.calls[0][0]);
+		expect(line).toContain("203.0.113.0/24");
+		expect(line).not.toContain("203.0.113.77");
+		await g.broker.stop();
+	});
+
+	it("off makes no store call and lets everything through", async () => {
+		const g = await gateway("off");
+		for (let i = 0; i < 5; i++) expect(await g.get("1.2.3.4")).toBe(200);
+		expect(g.fake.data.size).toBe(0);
+		expect(g.spy.mock.calls.filter((c) => c[0] === "limits.refused")).toHaveLength(0);
+		await g.broker.stop();
+	});
+
+	it("rejects an unknown mode and does not reset a metric the middleware registered", () => {
+		expect(() => new RateLimitStore(60_000, { mode: "bogus" as any })).toThrow(/Invalid LIMITS_MODE/);
+		const b = new ServiceBroker({ logger: false, metrics: { enabled: true } });
+		const reg = jest.spyOn(b.metrics, "register");
+		b.metrics.register({ type: "counter", name: "limits.refused", labelNames: ["action", "mode"] });
+		reg.mockClear();
+		void new RateLimitStore(60_000, { limitsStore: "Memory" }, b);
+		expect(reg).not.toHaveBeenCalled();
+	});
+
+	it("maskIp keeps the /24 or /48 prefix only", () => {
+		expect(maskIp("203.0.113.77")).toBe("203.0.113.0/24");
+		expect(maskIp("2001:db8:abcd:12::1")).toBe("2001:db8:abcd::/48");
+		expect(maskIp("::1")).toBe("0:0:0::/48");
+		expect(maskIp("unknown")).toBe("?");
 	});
 });
 
