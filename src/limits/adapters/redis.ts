@@ -75,6 +75,7 @@ export class RedisAdapter extends GuardedStore {
 	}
 
 	override async stop(): Promise<void> {
+		this.closed = true;
 		if (!this.owned || !this.client) return;
 		const client = this.client;
 		this.client = undefined;
@@ -107,6 +108,10 @@ export class RedisAdapter extends GuardedStore {
 		const [count, , pttl] = await this.redis.multi().incr(k).pExpire(k, windowMs, "NX").pTTL(k).exec();
 		const n = Number(count);
 		const left = Number(pttl);
+		if (!(left > 0)) {
+			// A counter without a TTL (written elsewhere) would block its key forever: re-arm it.
+			await this.redis.pExpire(k, windowMs);
+		}
 		return { allowed: n <= perMinute, retryAfterMs: left > 0 ? left : windowMs, count: n };
 	}
 

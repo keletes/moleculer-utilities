@@ -64,7 +64,7 @@ describe("Redis adapter", () => {
 		const store = new RedisAdapter({ client: fake }, { onError, logger: { warn } });
 		expect((await store.hit("k", 1)).allowed).toBe(true);
 		expect((await store.acquire("k", 0, "l", 1000)).allowed).toBe(true);
-		expect(await store.renew("k", "l", 1000)).toBe(false);
+		expect(await store.renew("k", "l", 1000)).toBe("error");
 		await store.release("k", "l");
 		expect(onError).toHaveBeenCalledTimes(4);
 		expect(warn).toHaveBeenCalledTimes(1);
@@ -87,6 +87,24 @@ describe("Redis adapter", () => {
 		expect(Date.now() - t).toBeLessThan(100);
 		expect((await store.hit("k", 1)).allowed).toBe(true);
 		await store.stop();
+	});
+
+	it("re-arms a counter that has no TTL", async () => {
+		const fake = new FakeRedis();
+		fake.data.set("p:h:k", { kind: "str", value: 5 });
+		const store = new RedisAdapter({ client: fake, prefix: "p:" });
+		const r = await store.hit("k", 3, 5000);
+		expect(r.allowed).toBe(false);
+		expect(fake.data.get("p:h:k")?.expireAt).toBeDefined();
+	});
+
+	it("after stop() every call is a silent no-op", async () => {
+		const warn = jest.fn();
+		const store = new RedisAdapter({ client: new FakeRedis() }, { logger: { warn } });
+		await store.stop();
+		await store.release("k", "l");
+		expect((await store.hit("k", 1)).allowed).toBe(true);
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it("two services on one Redis never share counters (prefix)", async () => {
@@ -504,6 +522,94 @@ describe("Limits middleware: store trouble, prefix, lease TTL (Redis mock)", () 
 		expect((await crashed.acquire("k2:svc.work:abc", 1, "next", 150)).allowed).toBe(true);
 	});
 
+	it("a store error during renewal keeps the lease; only a vanished lease stops being renewed", async () => {
+		const fake = new FakeRedis();
+		const { b, gates } = build(fake, { leaseTtlMs: 400, renewEveryMs: 40 });
+		broker = b;
+		await b.start();
+		const held = b.call("svc.work", {}, meta("k1", limits));
+		await flush();
+		fake.down = true; // a blip: renewals fail open as "error"
+		await sleep(150);
+		fake.down = false;
+		await sleep(100);
+		await expect(b.call("svc.work", {}, meta("k1", limits))).rejects.toBeInstanceOf(LimitExceededError);
+		gates[0].resolve();
+		await held;
+	});
+
+	it("a lease older than maxLeaseMs is released by the middleware (unconsumed stream)", async () => {
+		const fake = new FakeRedis();
+		const b = new ServiceBroker({
+			logger: false,
+			middlewares: [Limits({ store: { type: "Redis", options: { client: fake } }, service: "svc", renewEveryMs: 30, maxLeaseMs: 120 })],
+		});
+		const streams: PassThrough[] = [];
+		makeService(b, "svc", [], streams);
+		broker = b;
+		await b.start();
+		const rules = { "svc.jobs": [{ concurrent: 1 }] };
+		await b.call("svc.jobs", {}, meta("k1", rules));
+		await expect(b.call("svc.jobs", {}, meta("k1", rules))).rejects.toBeInstanceOf(LimitExceededError);
+		await sleep(250);
+		await expect(b.call("svc.jobs", {}, meta("k1", rules))).resolves.toBeDefined();
+		streams.forEach((s) => s.destroy());
+	});
+
+	it("a stream that is already destroyed releases at once; stopping releases held leases", async () => {
+		const fake = new FakeRedis();
+		const b = new ServiceBroker({ logger: false, middlewares: [Limits({ store: { type: "Redis", options: { client: fake } }, service: "svc" })] });
+		b.createService({
+			name: "svc",
+			actions: {
+				dead: { limits: { lease: "stream" }, handler: () => { const s = new PassThrough(); s.destroy(); return s; } },
+				open: { limits: { lease: "stream" }, handler: () => new PassThrough() },
+			},
+		});
+		await b.start();
+		const rules = { "svc.dead": [{ concurrent: 1 }], "svc.open": [{ concurrent: 1 }] };
+		for (let i = 0; i < 3; i++) await b.call("svc.dead", {}, meta("k1", rules));
+		await b.call("svc.open", {}, meta("k1", rules));
+		expect([...fake.data.keys()].some((k) => k.includes("svc.open"))).toBe(true);
+		await b.stop();
+		expect([...fake.data.keys()].some((k) => k.includes("svc.open"))).toBe(false);
+	});
+
+	it("a concurrency refusal does not consume a minute slot; a minute refusal gives its leases back", async () => {
+		const fake = new FakeRedis();
+		const { b, gates } = build(fake);
+		broker = b;
+		await b.start();
+		const rules = { "svc.work": [{ concurrent: 1, perMinute: 2 }] };
+		const first = b.call("svc.work", {}, meta("k1", rules));
+		await flush();
+		for (let i = 0; i < 4; i++) await expect(b.call("svc.work", {}, meta("k1", rules))).rejects.toBeInstanceOf(LimitExceededError);
+		gates[0].resolve();
+		await first;
+		// only one minute slot was used so far
+		const second = b.call("svc.work", {}, meta("k1", rules));
+		await flush();
+		gates[1].resolve();
+		await second;
+		// the minute budget (2) is now spent: refused, and the lease taken first is not left behind
+		await expect(b.call("svc.work", {}, meta("k1", rules))).rejects.toBeInstanceOf(LimitExceededError);
+		const zsets = [...fake.data.values()].filter((e) => e.kind === "zset");
+		expect(zsets.every((z) => (z as any).members.size === 0)).toBe(true);
+	});
+
+	it("treats params: null as absent", async () => {
+		const fake = new FakeRedis();
+		const { b } = build(fake);
+		broker = b;
+		await b.start();
+		const rules = { "svc.work": [{ concurrent: 1, params: null as any }] };
+		const first = b.call("svc.work", { a: 1 }, meta("k1", rules));
+		await flush();
+		await expect(b.call("svc.work", { a: 2 }, meta("k1", rules))).rejects.toBeInstanceOf(LimitExceededError);
+		await b.stop(); // releases; the pending handler is abandoned
+		void first.catch(() => undefined);
+	});
+
 	it("a lease released on another replica is dropped from the holder's renewals", async () => {
 		const fake = new FakeRedis();
 		const mk = () => {
@@ -603,6 +709,15 @@ describe("RateLimitStore with moleculer-web's built-in rateLimit", () => {
 		expect(clientIp({ headers: { "x-forwarded-for": ["8.8.8.8"] }, socket: {} } as any)).toBe("8.8.8.8");
 		expect(clientIp({ headers: {}, socket: { remoteAddress: "5.5.5.5" } } as any)).toBe("5.5.5.5");
 		expect(clientIp({ headers: {}, socket: {} } as any)).toBe("unknown");
+		const ip = (xff: string | undefined, remote?: string) =>
+			clientIp({ headers: xff === undefined ? {} : { "x-forwarded-for": xff }, socket: { remoteAddress: remote } } as any);
+		expect(ip(" 1.2.3.4:5678 , 9.9.9.9")).toBe("1.2.3.4");
+		expect(ip("[::1]:443")).toBe("::1");
+		expect(ip("::FFFF:1.2.3.4")).toBe("1.2.3.4");
+		expect(ip("2001:DB8::1")).toBe("2001:db8::1");
+		expect(ip("not-an-ip", "::ffff:5.5.5.5")).toBe("5.5.5.5");
+		expect(ip("junk", "also junk")).toBe("unknown");
+		expect(ip("junk-a")).toBe(ip("junk-b"));
 	});
 });
 
@@ -672,6 +787,13 @@ describe("PodCpuUsage", () => {
 		expect((await (await brokerWith(PodCpuUsage({ measure: "node", readers }), 70)).getCpuUsage()).avg).toBe(70);
 		expect((await (await brokerWith(PodCpuUsage({ measure: "pod", readers }), 70)).getCpuUsage()).avg).toBe(30);
 		expect(() => PodCpuUsage({ measure: "bogus" as any })).toThrow();
+	});
+
+	it("never reports NaN: non-finite terms are ignored", async () => {
+		const b = await brokerWith(PodCpuUsage({ readers: files({ "cpu.pressure": "some avg10=nan" }) }), 20);
+		expect((await b.getCpuUsage()).avg).toBe(20);
+		const c = await brokerWith(PodCpuUsage({ readers: files({ "cpu.pressure": psi(30) }) }), NaN);
+		expect((await c.getCpuUsage()).avg).toBe(30);
 	});
 
 	it("works unbound, as Moleculer's heartbeat calls it", async () => {

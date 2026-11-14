@@ -1,4 +1,4 @@
-export type { HitResult, LimitsStore, StoreContext } from "./base";
+export type { HitResult, RenewResult, LimitsStore, StoreContext } from "./base";
 export { MemoryAdapter } from "./memory";
 export { RedisAdapter } from "./redis";
 export type { RedisAdapterOptions, RedisLikeClient, RedisLikeMulti } from "./redis";

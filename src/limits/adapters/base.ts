@@ -1,3 +1,5 @@
+export type RenewResult = "ok" | "gone" | "error";
+
 export interface HitResult {
 	allowed: boolean;
 	/** Time left in the key's window (hit) or 0 when unknown (acquire: the middleware applies its own hint). */
@@ -15,8 +17,8 @@ export interface LimitsStore {
 	hit(key: string, perMinute: number, windowMs?: number): Promise<HitResult>;
 	/** Optimistic lease: takes a slot of `cap` for `ttlMs`, or refuses. Never admits more than `cap`. */
 	acquire(key: string, cap: number, leaseId: string, ttlMs: number): Promise<HitResult>;
-	/** Extends a held lease; false when it is gone (released, expired) or the store failed. */
-	renew(key: string, leaseId: string, ttlMs: number): Promise<boolean>;
+	/** Extends a held lease: "ok", "gone" (released or expired: stop renewing) or "error" (store trouble: keep trying). */
+	renew(key: string, leaseId: string, ttlMs: number): Promise<RenewResult>;
 	release(key: string, leaseId: string): Promise<void>;
 	/** Never blocks: connects in the background. */
 	start(): void | Promise<void>;
@@ -45,6 +47,8 @@ export abstract class GuardedStore implements LimitsStore {
 	protected readonly timeoutMs: number;
 	protected readonly prefix: string;
 	private lastWarn = 0;
+	/** After `stop()` every call is a silent no-op (a late release must not warn about a missing client). */
+	protected closed = false;
 
 	constructor(protected readonly ctx: StoreContext = {}) {
 		this.timeoutMs = ctx.timeoutMs ?? 100;
@@ -62,8 +66,8 @@ export abstract class GuardedStore implements LimitsStore {
 	acquire(key: string, cap: number, leaseId: string, ttlMs: number): Promise<HitResult> {
 		return this.guard(() => this.doAcquire(key, cap, leaseId, ttlMs), ALLOW);
 	}
-	renew(key: string, leaseId: string, ttlMs: number): Promise<boolean> {
-		return this.guard(() => this.doRenew(key, leaseId, ttlMs), false);
+	renew(key: string, leaseId: string, ttlMs: number): Promise<RenewResult> {
+		return this.guard(async () => ((await this.doRenew(key, leaseId, ttlMs)) ? "ok" : "gone"), "error" as RenewResult);
 	}
 	async release(key: string, leaseId: string): Promise<void> {
 		await this.guard(() => this.doRelease(key, leaseId), undefined);
@@ -72,10 +76,11 @@ export abstract class GuardedStore implements LimitsStore {
 		/* nothing by default */
 	}
 	async stop(): Promise<void> {
-		/* nothing by default */
+		this.closed = true;
 	}
 
 	protected async guard<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+		if (this.closed) return fallback;
 		let timer: NodeJS.Timeout | undefined;
 		try {
 			return await Promise.race([

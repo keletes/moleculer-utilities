@@ -73,11 +73,11 @@ export function storeSuite(name: string, make: () => Promise<{ store: LimitsStor
 			await store.acquire(key, 1, "a", 200);
 			for (let i = 0; i < 4; i++) {
 				await sleep(80);
-				expect(await store.renew(key, "a", 200)).toBe(true);
+				expect(await store.renew(key, "a", 200)).toBe("ok");
 			}
 			expect((await store.acquire(key, 1, "b", 200)).allowed).toBe(false);
 			await store.release(key, "a");
-			expect(await store.renew(key, "a", 200)).toBe(false);
+			expect(await store.renew(key, "a", 200)).toBe("gone");
 		});
 	});
 }

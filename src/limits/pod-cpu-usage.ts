@@ -80,10 +80,11 @@ export function PodCpuUsage(opts: PodCpuUsageOptions = {}): Middleware {
 			// An arrow function: Moleculer passes `broker.getCpuUsage` unbound, so it must not use `this`.
 			broker.getCpuUsage = async () => {
 				const base = (await original()) as { avg: number };
-				if (measure === "node") return base;
-				const terms = (await Promise.all([pressure(), throttled()])).filter((t): t is number => t !== undefined);
-				if (terms.length === 0) return base;
-				return { ...base, avg: clamp(Math.max(...(measure === "pod" ? [] : [base.avg]), ...terms)) };
+				if (measure === "node") return Number.isFinite(base.avg) ? base : { ...base, avg: 0 };
+				const nodeAvg = Number.isFinite(base.avg) ? [base.avg] : [];
+				const terms = (await Promise.all([pressure(), throttled()])).filter((t): t is number => typeof t === "number" && Number.isFinite(t));
+				if (terms.length === 0) return Number.isFinite(base.avg) ? base : { ...base, avg: 0 };
+				return { ...base, avg: clamp(Math.max(...(measure === "pod" ? [] : nodeAvg), ...terms)) };
 			};
 		},
 	} as unknown as Middleware;

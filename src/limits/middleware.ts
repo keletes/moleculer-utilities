@@ -31,6 +31,8 @@ export interface LimitsOptions {
 	/** Lease time to live (default 60 s) and renewal period (default 20 s). */
 	leaseTtlMs?: number;
 	renewEveryMs?: number;
+	/** A lease older than this is released and no longer renewed (a stream nobody consumes never closes). Default 30 min, `LIMITS_MAX_LEASE_MS`. */
+	maxLeaseMs?: number;
 }
 
 /** What `broker.limits` offers a service that checks by hand (`lease: "manual"`). */
@@ -90,12 +92,13 @@ export function Limits(opts: LimitsOptions = {}): Middleware {
 	const concurrentRetryAfter = opts.concurrentRetryAfter ?? 5;
 	const leaseTtlMs = opts.leaseTtlMs ?? 60_000;
 	const renewEveryMs = opts.renewEveryMs ?? 20_000;
+	const maxLeaseMs = opts.maxLeaseMs ?? (Number(process.env.LIMITS_MAX_LEASE_MS) || 30 * 60_000);
 
 	let broker!: ServiceBroker;
 	let store!: LimitsStore;
 	let lastShadowWarn = 0;
 	// Handles held by this pod, renewed until released (or until the store says the lease is gone).
-	const held = new Set<string>();
+	const held = new Map<string, number>(); // handle -> time it was taken
 	let renewTimer: NodeJS.Timeout | undefined;
 
 	const parse = (handle: string): [string, string] | null => {
@@ -127,16 +130,22 @@ export function Limits(opts: LimitsOptions = {}): Middleware {
 	}
 
 	function track(handle: string) {
-		held.add(handle);
+		held.set(handle, Date.now());
 		if (renewTimer) return;
 		renewTimer = setInterval(() => {
-			for (const h of [...held]) {
+			const now = Date.now();
+			for (const [h, since] of [...held]) {
+				if (now - since > maxLeaseMs) {
+					// Nobody released it in time (an unconsumed stream, a lost manual handle): free the slot.
+					void release([h]);
+					continue;
+				}
 				const parts = parse(h);
 				if (!parts) continue;
 				store
 					.renew(parts[0], parts[1], leaseTtlMs)
-					// Released elsewhere (another replica) or expired: stop renewing it.
-					.then((ok) => ok || held.delete(h))
+					// Only "gone" (released elsewhere, expired) stops the renewal; a store error keeps trying.
+					.then((r) => r !== "gone" || held.delete(h))
 					.catch(() => undefined);
 			}
 		}, renewEveryMs);
@@ -170,33 +179,37 @@ export function Limits(opts: LimitsOptions = {}): Middleware {
 		const handles: string[] = [];
 		const giveBack = () => release(handles.splice(0));
 
-		for (const rule of rules) {
-			if (!rule || !matchParams(rule.params, facts)) continue;
-			const counter = `${keyId}:${action}:${ruleHash(rule)}`;
+		// `params: null` counts as absent.
+		const matching = rules.filter((rule) => rule && (rule.params == null || matchParams(rule.params, facts)));
+		const counterOf = (rule: LimitRule) => `${keyId}:${action}:${ruleHash(rule)}`;
 
-			if (rule.perMinute != null) {
-				const r = await store.hit(counter, rule.perMinute);
-				if (!r.allowed) {
-					const err = refused(action, ctx, Math.ceil(r.retryAfterMs / 1000));
-					if (err) {
-						await giveBack();
-						throw err;
-					}
+		// Concurrency first, minute budget second: a call refused for concurrency never consumes a minute slot, and
+		// one refused by the minute budget gives its fresh leases back.
+		for (const rule of matching) {
+			if (rule.concurrent == null) continue;
+			const counter = counterOf(rule);
+			const id = randomUUID();
+			const r = await store.acquire(counter, rule.concurrent, id, leaseTtlMs);
+			if (r.allowed) {
+				const handle = `${counter}${SEP}${id}`;
+				handles.push(handle);
+				track(handle);
+			} else {
+				const err = refused(action, ctx, concurrentRetryAfter);
+				if (err) {
+					await giveBack();
+					throw err;
 				}
 			}
-			if (rule.concurrent != null) {
-				const id = randomUUID();
-				const r = await store.acquire(counter, rule.concurrent, id, leaseTtlMs);
-				if (r.allowed) {
-					const handle = `${counter}${SEP}${id}`;
-					handles.push(handle);
-					track(handle);
-				} else {
-					const err = refused(action, ctx, concurrentRetryAfter);
-					if (err) {
-						await giveBack();
-						throw err;
-					}
+		}
+		for (const rule of matching) {
+			if (rule.perMinute == null) continue;
+			const r = await store.hit(counterOf(rule), rule.perMinute);
+			if (!r.allowed) {
+				const err = refused(action, ctx, Math.ceil(r.retryAfterMs / 1000));
+				if (err) {
+					await giveBack();
+					throw err;
 				}
 			}
 		}
@@ -222,7 +235,12 @@ export function Limits(opts: LimitsOptions = {}): Middleware {
 				throw err;
 			}
 			if (lease === "stream" && result && typeof (result as any).once === "function") {
-				const stream = result as NodeJS.ReadableStream;
+				const stream = result as NodeJS.ReadableStream & { destroyed?: boolean; readableEnded?: boolean };
+				// Already over: no event will ever come.
+				if (stream.destroyed || stream.readableEnded) {
+					await release(handles);
+					return result;
+				}
 				let done = false;
 				const end = () => {
 					if (done) return;
@@ -262,6 +280,8 @@ export function Limits(opts: LimitsOptions = {}): Middleware {
 			if (mode !== "off") void store.start();
 		},
 		async stopped() {
+			// Give the held leases back (bounded: each store call gives up after 100 ms, fail open), then close.
+			await release([...held.keys()]);
 			if (renewTimer) clearInterval(renewTimer);
 			renewTimer = undefined;
 			await store.stop();

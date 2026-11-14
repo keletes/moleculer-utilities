@@ -14,6 +14,7 @@ export class MemoryAdapter extends GuardedStore {
 	}
 
 	override async stop(): Promise<void> {
+		this.closed = true;
 		if (this.sweeper) clearInterval(this.sweeper);
 		this.sweeper = undefined;
 	}
