@@ -956,6 +956,8 @@ describe("PodCpuUsage", () => {
 	});
 
 	it("the heartbeat carries it as node.cpu and a caller's CpuUsage strategy picks the least pressured node", async () => {
+		// measure "pod": the default "max" mixes in the real host os.cpus() sample, so a busy test machine could push
+		// "calm" above "busy" (the flake); only the injected pressure decides here.
 		const mk = (id: string, pressure?: number) =>
 			new ServiceBroker({
 				nodeID: id,
@@ -963,7 +965,7 @@ describe("PodCpuUsage", () => {
 				transporter: "Fake",
 				heartbeatInterval: 1,
 				registry: { strategy: "CpuUsage", strategyOptions: { sampleCount: 5, lowCpuUsage: 5 } },
-				middlewares: pressure === undefined ? [] : [PodCpuUsage({ readers: files({ "cpu.pressure": psi(pressure) }) })],
+				middlewares: pressure === undefined ? [] : [PodCpuUsage({ measure: "pod", readers: files({ "cpu.pressure": psi(pressure) }) })],
 			});
 		const make = (b: ServiceBroker) =>
 			b.createService({ name: "heavy", actions: { run: () => b.nodeID } });
@@ -974,9 +976,9 @@ describe("PodCpuUsage", () => {
 		make(calm);
 		await Promise.all([busy.start(), calm.start(), caller.start()]);
 		try {
-			const seen = async (id: string, min: number) => {
+			const seen = async (id: string, value: number) => {
 				for (let i = 0; i < 80; i++) {
-					if ((caller.registry.nodes.get(id)?.cpu ?? 0) >= min) return true;
+					if (caller.registry.nodes.get(id)?.cpu === value) return true;
 					await sleep(100);
 				}
 				return false;
