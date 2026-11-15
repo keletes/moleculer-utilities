@@ -26,6 +26,20 @@ export interface RedisAdapterOptions {
 	/** An existing client: used as is (the caller connects and closes it). Wins over `url`. */
 	client?: RedisLikeClient;
 	prefix?: string;
+	/**
+	 * `PING` interval of the adapter's own client, in ms (default env `LIMITS_REDIS_PING_MS`, else 10000; 0 disables).
+	 * Keeps the connection from going idle: a network hop (conntrack, Cilium, a load balancer) drops idle TCP
+	 * connections, and the first command after that would pay a reconnect longer than the 100 ms command timeout.
+	 * Ignored for an injected `client`.
+	 */
+	pingIntervalMs?: number;
+}
+
+const DEFAULT_PING_MS = 10_000;
+
+function resolvePingMs(opt?: number): number {
+	const raw = opt ?? (process.env.LIMITS_REDIS_PING_MS !== undefined && process.env.LIMITS_REDIS_PING_MS !== "" ? Number(process.env.LIMITS_REDIS_PING_MS) : DEFAULT_PING_MS);
+	return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 
 /**
@@ -46,11 +60,13 @@ export class RedisAdapter extends GuardedStore {
 	private client?: RedisLikeClient;
 	private owned = false;
 	private readonly url?: string;
+	private readonly pingIntervalMs?: number;
 
 	constructor(opts: RedisAdapterOptions = {}, ctx: StoreContext = {}) {
 		super({ ...ctx, prefix: opts.prefix ?? ctx.prefix });
 		this.client = opts.client;
 		this.url = opts.url;
+		this.pingIntervalMs = opts.pingIntervalMs;
 	}
 
 	override start(): void {
@@ -59,10 +75,18 @@ export class RedisAdapter extends GuardedStore {
 			// Optional peer dependency: required only when the adapter has to create its own client.
 			// eslint-disable-next-line @typescript-eslint/no-var-requires
 			const { createClient } = require("redis");
+			const pingInterval = resolvePingMs(this.pingIntervalMs);
 			this.client = createClient({
 				url: this.url,
 				disableOfflineQueue: true,
-				socket: { connectTimeout: 1000, reconnectStrategy: (retries: number) => Math.min(retries * 100, 3000) },
+				// A failing ping surfaces as the client's "error" event, handled below (never thrown).
+				...(pingInterval > 0 ? { pingInterval } : {}),
+				socket: {
+					connectTimeout: 1000,
+					keepAlive: true,
+					keepAliveInitialDelay: 5000,
+					reconnectStrategy: (retries: number) => Math.min(retries * 100, 3000),
+				},
 			}) as RedisLikeClient;
 			this.owned = true;
 			// An unhandled "error" event would crash the process; the guard reports failures per command.
