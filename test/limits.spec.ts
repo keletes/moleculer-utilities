@@ -90,6 +90,58 @@ describe("Redis adapter", () => {
 		await store.stop();
 	});
 
+	describe("own client keep-alive", () => {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const redisMod = require("redis");
+		const make = async (opts: Record<string, unknown>, env?: string) => {
+			const prev = process.env.LIMITS_REDIS_PING_MS;
+			if (env === undefined) delete process.env.LIMITS_REDIS_PING_MS;
+			else process.env.LIMITS_REDIS_PING_MS = env;
+			const handlers: Record<string, (e: unknown) => void> = {};
+			const fake = {
+				on: (ev: string, fn: (e: unknown) => void) => (handlers[ev] = fn),
+				connect: () => Promise.resolve(),
+				quit: () => Promise.resolve(),
+				destroy: () => undefined,
+			};
+			const spy = jest.spyOn(redisMod, "createClient").mockReturnValue(fake as never);
+			const store = new RedisAdapter(opts, { logger: { warn: jest.fn() } });
+			store.start();
+			const cfg = spy.mock.calls[0][0] as Record<string, any>;
+			spy.mockRestore();
+			if (prev === undefined) delete process.env.LIMITS_REDIS_PING_MS;
+			else process.env.LIMITS_REDIS_PING_MS = prev;
+			return { cfg, handlers, store };
+		};
+
+		it("passes pingInterval (default 10 s) and TCP keep-alive to createClient", async () => {
+			const { cfg, store } = await make({ url: "redis://x" });
+			expect(cfg.pingInterval).toBe(10000);
+			expect(cfg.socket.keepAlive).toBe(true);
+			await store.stop();
+		});
+
+		it("honours the option and the env, 0 disables", async () => {
+			expect((await make({ pingIntervalMs: 3000 })).cfg.pingInterval).toBe(3000);
+			expect((await make({}, "2500")).cfg.pingInterval).toBe(2500);
+			expect((await make({ pingIntervalMs: 0 })).cfg.pingInterval).toBeUndefined();
+			expect((await make({}, "0")).cfg.pingInterval).toBeUndefined();
+		});
+
+		it("swallows a ping error through the error handler", async () => {
+			const { handlers, store } = await make({});
+			expect(() => handlers.error(new Error("ping failed"))).not.toThrow();
+			await store.stop();
+		});
+
+		it("does not touch an injected client", () => {
+			const spy = jest.spyOn(redisMod, "createClient");
+			new RedisAdapter({ client: new FakeRedis() }).start();
+			expect(spy).not.toHaveBeenCalled();
+			spy.mockRestore();
+		});
+	});
+
 	it("re-arms a counter that has no TTL", async () => {
 		const fake = new FakeRedis();
 		fake.data.set("p:h:k", { kind: "str", value: 5 });
