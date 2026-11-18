@@ -3,7 +3,7 @@ import type { RedisLikeClient, RedisLikeMulti } from "../../src/limits/adapters"
 type Entry = { kind: "str"; value: number; expireAt?: number } | { kind: "zset"; members: Map<string, number>; expireAt?: number };
 
 /**
- * In-memory stand-in for the node-redis commands the Redis adapter uses (INCR, PEXPIRE [NX], PTTL, ZADD [XX CH],
+ * In-memory stand-in for the ioredis commands the Redis adapter uses (INCR, PEXPIRE [NX], PTTL, ZADD [XX CH],
  * ZREMRANGEBYSCORE, ZCARD, ZREM, MULTI/EXEC), with the real expiry semantics. `down` makes every command reject,
  * `latencyMs` delays every command: both simulate an unreachable or slow Redis.
  */
@@ -70,19 +70,19 @@ export class FakeRedis implements RedisLikeClient {
 				this.data.set(key, entry);
 				return entry.value;
 			}
-			case "pExpire": {
+			case "pexpire": {
 				const e = this.live(key);
 				if (!e) return 0;
 				if (args[1] === "NX" && e.expireAt !== undefined) return 0;
 				e.expireAt = Date.now() + args[0];
 				return 1;
 			}
-			case "pTTL": {
+			case "pttl": {
 				const e = this.live(key);
 				if (!e) return -2;
 				return e.expireAt === undefined ? -1 : e.expireAt - Date.now();
 			}
-			case "zRemRangeByScore": {
+			case "zremrangebyscore": {
 				const e = this.live(key);
 				if (!e || e.kind !== "zset") return 0;
 				const max = args[1] === "+inf" ? Infinity : Number(args[1]);
@@ -92,7 +92,7 @@ export class FakeRedis implements RedisLikeClient {
 				if (e.members.size === 0) this.data.delete(key);
 				return n;
 			}
-			case "zAdd": {
+			case "zadd": {
 				const [member, options] = args;
 				let e = this.live(key);
 				if (e && e.kind !== "zset") throw new Error("WRONGTYPE");
@@ -106,11 +106,11 @@ export class FakeRedis implements RedisLikeClient {
 				e.members.set(member.value, member.score);
 				return options?.CH ? (changed ? 1 : 0) : had ? 0 : 1;
 			}
-			case "zCard": {
+			case "zcard": {
 				const e = this.live(key);
 				return e && e.kind === "zset" ? e.members.size : 0;
 			}
-			case "zRem": {
+			case "zrem": {
 				const e = this.live(key);
 				if (!e || e.kind !== "zset") return 0;
 				const ok = e.members.delete(args[0]);
@@ -126,30 +126,41 @@ export class FakeRedis implements RedisLikeClient {
 		const ops: [string, ...any[]][] = [];
 		const chain: any = {
 			incr: (k: string) => (ops.push(["incr", k]), chain),
-			pExpire: (k: string, ms: number, mode?: string) => (ops.push(["pExpire", k, ms, mode]), chain),
-			pTTL: (k: string) => (ops.push(["pTTL", k]), chain),
-			zRemRangeByScore: (k: string, a: unknown, b: unknown) => (ops.push(["zRemRangeByScore", k, a, b]), chain),
-			zAdd: (k: string, m: unknown) => (ops.push(["zAdd", k, m]), chain),
-			zCard: (k: string) => (ops.push(["zCard", k]), chain),
-			// MULTI/EXEC: every command runs together, nothing interleaves.
+			pexpire: (k: string, ms: number, mode?: string) => (ops.push(["pexpire", k, ms, mode]), chain),
+			pttl: (k: string) => (ops.push(["pttl", k]), chain),
+			zremrangebyscore: (k: string, a: unknown, b: unknown) => (ops.push(["zremrangebyscore", k, a, b]), chain),
+			zadd: (k: string, score: number, value: string) => (ops.push(["zadd", k, { score, value }]), chain),
+			zcard: (k: string) => (ops.push(["zcard", k]), chain),
+			// MULTI/EXEC: every command runs together, nothing interleaves. Replies are ioredis' [error, result] pairs.
 			exec: async () => {
 				await this.gate();
-				return ops.map((op) => this.run(op));
+				return ops.map((op) => {
+					try {
+						return [null, this.run(op)] as [null, unknown];
+					} catch (err) {
+						return [err as Error, undefined] as [Error, unknown];
+					}
+				});
 			},
 		};
 		return chain;
 	}
 
-	async zAdd(key: string, member: { score: number; value: string }, options?: Record<string, unknown>) {
+	// ioredis variadic form: zadd(key, "XX", "CH", score, member) / zadd(key, score, member).
+	async zadd(key: string, ...args: (string | number)[]) {
 		await this.gate();
-		return this.run(["zAdd", key, member, options]);
+		const flags: string[] = [];
+		while (typeof args[0] === "string" && /^(XX|NX|CH)$/.test(args[0])) flags.push(args.shift() as string);
+		const rest = args;
+		const [score, value] = rest as [number, string];
+		return this.run(["zadd", key, { score, value }, { condition: flags.includes("XX") ? "XX" : undefined, CH: flags.includes("CH") }]);
 	}
-	async zRem(key: string, member: string) {
+	async zrem(key: string, member: string) {
 		await this.gate();
-		return this.run(["zRem", key, member]);
+		return this.run(["zrem", key, member]);
 	}
-	async pExpire(key: string, ms: number) {
+	async pexpire(key: string, ms: number) {
 		await this.gate();
-		return this.run(["pExpire", key, ms]);
+		return this.run(["pexpire", key, ms]);
 	}
 }

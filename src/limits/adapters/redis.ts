@@ -1,24 +1,26 @@
 import { ALLOW, GuardedStore, HitResult, StoreContext } from "./base";
 
-/** The slice of a node-redis (>= 4) client the adapter uses; any client with these methods works. */
+/** The slice of an ioredis (>= 5) client the adapter uses; any client with these methods works. */
 export interface RedisLikeClient {
 	multi(): RedisLikeMulti;
-	zAdd(key: string, member: { score: number; value: string }, options?: Record<string, unknown>): Promise<unknown>;
-	zRem(key: string, member: string): Promise<unknown>;
-	pExpire(key: string, ms: number): Promise<unknown>;
+	zadd(key: string, ...args: (string | number)[]): Promise<unknown>;
+	zrem(key: string, member: string): Promise<unknown>;
+	pexpire(key: string, ms: number): Promise<unknown>;
+	ping?(): Promise<unknown>;
 	connect?(): Promise<unknown>;
 	on?(event: string, listener: (...args: unknown[]) => void): unknown;
 	quit?(): Promise<unknown>;
-	destroy?(): unknown;
+	disconnect?(): unknown;
 }
+/** ioredis `exec()` resolves `[error, result][]` (one pair per command), or `null` when the transaction was discarded. */
 export interface RedisLikeMulti {
 	incr(key: string): RedisLikeMulti;
-	pExpire(key: string, ms: number, mode?: "NX"): RedisLikeMulti;
-	pTTL(key: string): RedisLikeMulti;
-	zRemRangeByScore(key: string, min: number | string, max: number | string): RedisLikeMulti;
-	zAdd(key: string, member: { score: number; value: string }): RedisLikeMulti;
-	zCard(key: string): RedisLikeMulti;
-	exec(): Promise<unknown[]>;
+	pexpire(key: string, ms: number, mode?: "NX"): RedisLikeMulti;
+	pttl(key: string): RedisLikeMulti;
+	zremrangebyscore(key: string, min: number | string, max: number | string): RedisLikeMulti;
+	zadd(key: string, score: number, member: string): RedisLikeMulti;
+	zcard(key: string): RedisLikeMulti;
+	exec(): Promise<[Error | null, unknown][] | null>;
 }
 
 export interface RedisAdapterOptions {
@@ -30,9 +32,23 @@ export interface RedisAdapterOptions {
 	 * `PING` interval of the adapter's own client, in ms (default env `LIMITS_REDIS_PING_MS`, else 10000; 0 disables).
 	 * Keeps the connection from going idle: a network hop (conntrack, Cilium, a load balancer) drops idle TCP
 	 * connections, and the first command after that would pay a reconnect longer than the 100 ms command timeout.
-	 * Ignored for an injected `client`.
+	 * ioredis has no ping option: the adapter pings on a (unref'd) timer. Ignored for an injected `client`.
 	 */
 	pingIntervalMs?: number;
+}
+
+/** Optional peer dependency: required only when the adapter has to create its own client. */
+function loadIoredis(): new (...args: any[]) => unknown {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const mod = require("ioredis");
+		return mod.default ?? mod.Redis ?? mod;
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException)?.code === "MODULE_NOT_FOUND") {
+			throw new Error("The limits Redis store needs the optional peer dependency \"ioredis\" (yarn add ioredis)");
+		}
+		throw err;
+	}
 }
 
 const DEFAULT_PING_MS = 10_000;
@@ -54,13 +70,14 @@ function resolvePingMs(opt?: number): number {
  *   Scores are the pod's clock (`Date.now()`): pods are expected to be within a second or two of each other.
  *
  * Custom code instead of a built-in: Moleculer has no per-caller limit and no distributed counter; the client is the
- * adapter's own (offline queue off, so a down Redis rejects at once instead of stalling the call).
+ * adapter's own (ioredis, offline queue off, so a down Redis rejects at once instead of stalling the call).
  */
 export class RedisAdapter extends GuardedStore {
 	private client?: RedisLikeClient;
 	private owned = false;
 	private readonly url?: string;
 	private readonly pingIntervalMs?: number;
+	private pinger?: NodeJS.Timeout;
 
 	constructor(opts: RedisAdapterOptions = {}, ctx: StoreContext = {}) {
 		super({ ...ctx, prefix: opts.prefix ?? ctx.prefix });
@@ -72,27 +89,29 @@ export class RedisAdapter extends GuardedStore {
 	override start(): void {
 		if (this.client) return;
 		try {
-			// Optional peer dependency: required only when the adapter has to create its own client.
-			// eslint-disable-next-line @typescript-eslint/no-var-requires
-			const { createClient } = require("redis");
+			const Redis = loadIoredis();
 			const pingInterval = resolvePingMs(this.pingIntervalMs);
-			this.client = createClient({
-				url: this.url,
-				disableOfflineQueue: true,
-				// A failing ping surfaces as the client's "error" event, handled below (never thrown).
-				...(pingInterval > 0 ? { pingInterval } : {}),
-				socket: {
-					connectTimeout: 1000,
-					keepAlive: true,
-					keepAliveInitialDelay: 5000,
-					reconnectStrategy: (retries: number) => Math.min(retries * 100, 3000),
-				},
-			}) as RedisLikeClient;
+			const options = {
+				// Connected explicitly below, so a failure is handled and never an unhandled rejection.
+				lazyConnect: true,
+				// A down Redis rejects at once instead of queueing the command until it is back.
+				enableOfflineQueue: false,
+				connectTimeout: 1000,
+				keepAlive: 5000,
+				retryStrategy: (retries: number) => Math.min(retries * 100, 3000),
+			};
+			const client = (this.url ? new Redis(this.url, options) : new Redis(options)) as RedisLikeClient;
+			this.client = client;
 			this.owned = true;
 			// An unhandled "error" event would crash the process; the guard reports failures per command.
-			this.client.on?.("error", (err) => this.fail(err));
+			client.on?.("error", (err) => this.fail(err));
 			// Never awaited: the service starts with Redis down, commands fail open until it is up.
-			this.client.connect?.().catch((err) => this.fail(err));
+			client.connect?.().catch((err) => this.fail(err));
+			if (pingInterval > 0) {
+				// A failing ping goes to the rate-limited warn, never thrown.
+				this.pinger = setInterval(() => client.ping?.().catch((err) => this.fail(err)), pingInterval);
+				this.pinger.unref();
+			}
 		} catch (err) {
 			this.fail(err);
 		}
@@ -100,6 +119,8 @@ export class RedisAdapter extends GuardedStore {
 
 	override async stop(): Promise<void> {
 		this.closed = true;
+		if (this.pinger) clearInterval(this.pinger);
+		this.pinger = undefined;
 		if (!this.owned || !this.client) return;
 		const client = this.client;
 		this.client = undefined;
@@ -116,7 +137,7 @@ export class RedisAdapter extends GuardedStore {
 			if (timer) clearTimeout(timer);
 		}
 		try {
-			client.destroy?.();
+			client.disconnect?.();
 		} catch {
 			/* closed already */
 		}
@@ -127,14 +148,24 @@ export class RedisAdapter extends GuardedStore {
 		return this.client;
 	}
 
+	/** ioredis resolves a transaction as `[error, result][]`: a failed command throws here, so the store fails open. */
+	private async exec(multi: RedisLikeMulti): Promise<unknown[]> {
+		const replies = await multi.exec();
+		if (!replies) throw new Error("limits store transaction discarded");
+		return replies.map(([err, value]) => {
+			if (err) throw err;
+			return value;
+		});
+	}
+
 	protected async doHit(key: string, perMinute: number, windowMs: number): Promise<HitResult> {
 		const k = `${this.prefix}h:${key}`;
-		const [count, , pttl] = await this.redis.multi().incr(k).pExpire(k, windowMs, "NX").pTTL(k).exec();
+		const [count, , pttl] = await this.exec(this.redis.multi().incr(k).pexpire(k, windowMs, "NX").pttl(k));
 		const n = Number(count);
 		const left = Number(pttl);
 		if (!(left > 0)) {
 			// A counter without a TTL (written elsewhere) would block its key forever: re-arm it.
-			await this.redis.pExpire(k, windowMs);
+			await this.redis.pexpire(k, windowMs);
 		}
 		return { allowed: n <= perMinute, retryAfterMs: left > 0 ? left : windowMs, count: n };
 	}
@@ -142,30 +173,26 @@ export class RedisAdapter extends GuardedStore {
 	protected async doAcquire(key: string, cap: number, leaseId: string, ttlMs: number): Promise<HitResult> {
 		const k = `${this.prefix}c:${key}`;
 		const now = Date.now();
-		const replies = await this.redis
-			.multi()
-			.zRemRangeByScore(k, "-inf", now)
-			.zAdd(k, { score: now + ttlMs, value: leaseId })
-			.zCard(k)
-			.pExpire(k, ttlMs)
-			.exec();
+		const replies = await this.exec(
+			this.redis.multi().zremrangebyscore(k, "-inf", now).zadd(k, now + ttlMs, leaseId).zcard(k).pexpire(k, ttlMs),
+		);
 		const count = Number(replies[2]);
 		if (count <= cap) return { ...ALLOW, count };
-		await this.redis.zRem(k, leaseId);
+		await this.redis.zrem(k, leaseId);
 		return { allowed: false, retryAfterMs: 0, count: count - 1 };
 	}
 
 	protected async doRenew(key: string, leaseId: string, ttlMs: number): Promise<boolean> {
 		const k = `${this.prefix}c:${key}`;
 		// XX: only a lease that is still held; CH: reply 1 when its score changed.
-		const changed = await this.redis.zAdd(k, { score: Date.now() + ttlMs, value: leaseId }, { condition: "XX", CH: true });
+		const changed = await this.redis.zadd(k, "XX", "CH", Date.now() + ttlMs, leaseId);
 		if (Number(changed) <= 0) return false;
 		// The set's own TTL (set by acquire) must follow the renewed leases, or it would vanish under them.
-		await this.redis.pExpire(k, ttlMs);
+		await this.redis.pexpire(k, ttlMs);
 		return true;
 	}
 
 	protected async doRelease(key: string, leaseId: string): Promise<void> {
-		await this.redis.zRem(`${this.prefix}c:${key}`, leaseId);
+		await this.redis.zrem(`${this.prefix}c:${key}`, leaseId);
 	}
 }
