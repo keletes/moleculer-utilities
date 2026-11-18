@@ -81,8 +81,8 @@ describe("Redis adapter", () => {
 	});
 
 	it("start() does not block on an unreachable Redis (own client) and calls fail open", async () => {
-		require("redis"); // module load time is not the adapter's
-		const store = new RedisAdapter({ url: "redis://127.0.0.1:1" });
+		require("ioredis"); // module load time is not the adapter's
+		const store = new RedisAdapter({ url: "redis://127.0.0.1:1" }, { logger: { warn: jest.fn() } });
 		const t = Date.now();
 		await store.start();
 		expect(Date.now() - t).toBeLessThan(100);
@@ -90,55 +90,114 @@ describe("Redis adapter", () => {
 		await store.stop();
 	});
 
+	it("names ioredis when the optional peer dependency is missing", () => {
+		jest.isolateModules(() => {
+			jest.doMock("ioredis", () => {
+				throw Object.assign(new Error("Cannot find module 'ioredis'"), { code: "MODULE_NOT_FOUND" });
+			});
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const { RedisAdapter: Isolated } = require("../src/limits/adapters/redis");
+			const onError = jest.fn();
+			new Isolated({ url: "redis://x" }, { onError, logger: { warn: jest.fn() } }).start();
+			expect(onError.mock.calls[0][0].message).toContain("ioredis");
+		});
+		jest.dontMock("ioredis");
+	});
+
 	describe("own client keep-alive", () => {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		const redisMod = require("redis");
 		const make = async (opts: Record<string, unknown>, env?: string) => {
 			const prev = process.env.LIMITS_REDIS_PING_MS;
 			if (env === undefined) delete process.env.LIMITS_REDIS_PING_MS;
 			else process.env.LIMITS_REDIS_PING_MS = env;
 			const handlers: Record<string, (e: unknown) => void> = {};
-			const fake = {
-				on: (ev: string, fn: (e: unknown) => void) => (handlers[ev] = fn),
-				connect: () => Promise.resolve(),
-				quit: () => Promise.resolve(),
-				destroy: () => undefined,
-			};
-			const spy = jest.spyOn(redisMod, "createClient").mockReturnValue(fake as never);
-			const store = new RedisAdapter(opts, { logger: { warn: jest.fn() } });
-			store.start();
-			const cfg = spy.mock.calls[0][0] as Record<string, any>;
-			spy.mockRestore();
+			const ping = jest.fn(() => Promise.resolve("PONG"));
+			const ctor = jest.fn();
+			const quit = jest.fn(() => Promise.resolve());
+			let store: any;
+			jest.isolateModules(() => {
+				jest.doMock("ioredis", () => ({
+					default: function (this: any, ...args: unknown[]) {
+						ctor(...args);
+						return {
+							on: (ev: string, fn: (e: unknown) => void) => (handlers[ev] = fn),
+							connect: () => Promise.resolve(),
+							ping,
+							quit,
+							disconnect: () => undefined,
+						};
+					},
+				}));
+				// eslint-disable-next-line @typescript-eslint/no-var-requires
+				const { RedisAdapter: Isolated } = require("../src/limits/adapters/redis");
+				store = new Isolated(opts, { logger: { warn: jest.fn() } });
+				store.start();
+			});
+			jest.dontMock("ioredis");
 			if (prev === undefined) delete process.env.LIMITS_REDIS_PING_MS;
 			else process.env.LIMITS_REDIS_PING_MS = prev;
-			return { cfg, handlers, store };
+			return { ctor, handlers, ping, store };
 		};
 
-		it("passes pingInterval (default 10 s) and TCP keep-alive to createClient", async () => {
-			const { cfg, store } = await make({ url: "redis://x" });
-			expect(cfg.pingInterval).toBe(10000);
-			expect(cfg.socket.keepAlive).toBe(true);
-			await store.stop();
+		it("creates a lazy client without offline queue, with TCP keep-alive, and pings every 10 s by default", async () => {
+			jest.useFakeTimers();
+			try {
+				const { ctor, ping, store } = await make({ url: "redis://x" });
+				const [url, cfg] = ctor.mock.calls[0];
+				expect(url).toBe("redis://x");
+				expect(cfg).toMatchObject({ lazyConnect: true, enableOfflineQueue: false, keepAlive: 5000 });
+				jest.advanceTimersByTime(9999);
+				expect(ping).not.toHaveBeenCalled();
+				jest.advanceTimersByTime(1);
+				expect(ping).toHaveBeenCalledTimes(1);
+				await store.stop();
+				jest.advanceTimersByTime(30_000);
+				expect(ping).toHaveBeenCalledTimes(1);
+			} finally {
+				jest.useRealTimers();
+			}
 		});
 
 		it("honours the option and the env, 0 disables", async () => {
-			expect((await make({ pingIntervalMs: 3000 })).cfg.pingInterval).toBe(3000);
-			expect((await make({}, "2500")).cfg.pingInterval).toBe(2500);
-			expect((await make({ pingIntervalMs: 0 })).cfg.pingInterval).toBeUndefined();
-			expect((await make({}, "0")).cfg.pingInterval).toBeUndefined();
+			jest.useFakeTimers();
+			try {
+				const a = await make({ pingIntervalMs: 3000 });
+				jest.advanceTimersByTime(3000);
+				expect(a.ping).toHaveBeenCalledTimes(1);
+				const b = await make({}, "2500");
+				jest.advanceTimersByTime(2500);
+				expect(b.ping).toHaveBeenCalledTimes(1);
+				const c = await make({ pingIntervalMs: 0 });
+				const d = await make({}, "0");
+				jest.advanceTimersByTime(60_000);
+				expect(c.ping).not.toHaveBeenCalled();
+				expect(d.ping).not.toHaveBeenCalled();
+				await Promise.all([a, b, c, d].map((x) => x.store.stop()));
+			} finally {
+				jest.useRealTimers();
+			}
 		});
 
-		it("swallows a ping error through the error handler", async () => {
-			const { handlers, store } = await make({});
-			expect(() => handlers.error(new Error("ping failed"))).not.toThrow();
+		it("swallows a ping error through the rate-limited warn", async () => {
+			jest.useFakeTimers();
+			try {
+				const { ping, store, handlers } = await make({});
+				ping.mockRejectedValueOnce(new Error("ping failed"));
+				expect(() => jest.advanceTimersByTime(10_000)).not.toThrow();
+				expect(() => handlers.error(new Error("socket"))).not.toThrow();
+				await store.stop();
+			} finally {
+				jest.useRealTimers();
+			}
+		});
+
+		it("does not close or ping an injected client", async () => {
+			const fake = new FakeRedis();
+			const quit = jest.fn();
+			(fake as any).quit = quit;
+			const store = new RedisAdapter({ client: fake });
+			store.start();
 			await store.stop();
-		});
-
-		it("does not touch an injected client", () => {
-			const spy = jest.spyOn(redisMod, "createClient");
-			new RedisAdapter({ client: new FakeRedis() }).start();
-			expect(spy).not.toHaveBeenCalled();
-			spy.mockRestore();
+			expect(quit).not.toHaveBeenCalled();
 		});
 	});
 

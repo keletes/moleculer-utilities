@@ -1,4 +1,4 @@
-import { createClient } from "redis";
+import Redis from "ioredis";
 import { RedisAdapter } from "../src/limits";
 import { storeSuite } from "./helpers/store-suite";
 
@@ -8,14 +8,13 @@ const url = process.env.REDIS_URL;
 if (!url) throw new Error("Set REDIS_URL to run the real-Redis suite (verify:int)");
 
 storeSuite("Redis (real)", async () => {
-	const client = createClient({ url });
-	await client.connect();
+	const client = new Redis(url);
 	const prefix = `limits:test:${Date.now()}:`;
 	return {
-		store: new RedisAdapter({ client: client as never, prefix }),
+		store: new RedisAdapter({ client: client, prefix }),
 		cleanup: async () => {
 			const keys = await client.keys(`${prefix}*`);
-			if (keys.length) await client.del(keys);
+			if (keys.length) await client.del(...keys);
 			await client.quit();
 		},
 	};
