@@ -15,6 +15,8 @@ import {
 } from "../src/limits";
 import { maskIp } from "../src/limits/rate-limit-store";
 import type { AccessKeyLimits, StoreConfig } from "../src/limits";
+import { ALLOW, GuardedStore } from "../src/limits/adapters/base";
+import type { HitResult } from "../src/limits/adapters/base";
 import { FakeRedis } from "./helpers/fake-redis";
 import { storeSuite } from "./helpers/store-suite";
 
@@ -80,6 +82,71 @@ describe("Redis adapter", () => {
 		expect(Date.now() - t).toBeLessThan(400);
 	});
 
+	describe("store timeout", () => {
+		const slow = (latencyMs: number) => {
+			const fake = new FakeRedis();
+			fake.latencyMs = latencyMs;
+			return fake;
+		};
+		const took = async (store: { hit(k: string, n: number): Promise<unknown> }) => {
+			const t = Date.now();
+			await store.hit("k", 1);
+			return Date.now() - t;
+		};
+		afterEach(() => {
+			delete process.env.LIMITS_STORE_TIMEOUT_MS;
+		});
+
+		it("takes timeoutMs from the store config, for Memory and Redis", async () => {
+			const redis = resolveStore({ type: "Redis", options: { client: slow(300) }, timeoutMs: 250 });
+			const t = await took(redis);
+			expect(t).toBeGreaterThanOrEqual(240);
+			expect(t).toBeLessThan(400);
+			const mem = resolveStore({ type: "Memory", timeoutMs: 250 }) as unknown as { timeoutMs: number };
+			expect(mem.timeoutMs).toBe(250);
+		});
+
+		it("falls back to LIMITS_STORE_TIMEOUT_MS, the config wins over it", async () => {
+			process.env.LIMITS_STORE_TIMEOUT_MS = "250";
+			expect(await took(resolveStore({ type: "Redis", options: { client: slow(1000) } }))).toBeGreaterThanOrEqual(240);
+			const cfg = resolveStore({ type: "Memory", timeoutMs: 40 }) as unknown as { timeoutMs: number };
+			expect(cfg.timeoutMs).toBe(40);
+		});
+
+		it("keeps 100 ms by default and for an invalid env value (warns once)", () => {
+			const timeout = (s: unknown) => (s as { timeoutMs: number }).timeoutMs;
+			expect(timeout(resolveStore("Memory"))).toBe(100);
+			jest.isolateModules(() => {
+				// eslint-disable-next-line @typescript-eslint/no-var-requires
+				const { resolveStore: fresh } = require("../src/limits/adapters/resolve");
+				const warn = jest.fn();
+				for (const bad of ["abc", "0", "-5", "1.5"]) {
+					process.env.LIMITS_STORE_TIMEOUT_MS = bad;
+					expect(timeout(fresh("Memory", { logger: { warn } }))).toBe(100);
+				}
+				expect(warn).toHaveBeenCalledTimes(1);
+			});
+		});
+
+		it("rejects an invalid timeoutMs in the config", () => {
+			expect(() => resolveStore({ type: "Memory", timeoutMs: 0 })).toThrow(/timeoutMs/);
+		});
+
+		it("uses a reply that settled while the event loop was blocked", async () => {
+			class Late extends GuardedStore {
+				protected doHit = () => new Promise<HitResult>((r) => setImmediate(() => r({ allowed: false, retryAfterMs: 1, count: 7 })));
+				protected doAcquire = async () => ALLOW;
+				protected doRenew = async () => true;
+				protected doRelease = async () => undefined;
+			}
+			const store = new Late({ timeoutMs: 10 });
+			const pending = store.hit("k", 1);
+			const end = Date.now() + 40;
+			while (Date.now() < end); // blocks past the timeout before any timer or immediate can run
+			expect((await pending).count).toBe(7);
+		});
+	});
+
 	it("start() does not block on an unreachable Redis (own client) and calls fail open", async () => {
 		require("ioredis"); // module load time is not the adapter's
 		const store = new RedisAdapter({ url: "redis://127.0.0.1:1" }, { logger: { warn: jest.fn() } });
@@ -106,9 +173,9 @@ describe("Redis adapter", () => {
 
 	describe("own client keep-alive", () => {
 		const make = async (opts: Record<string, unknown>, env?: string) => {
-			const prev = process.env.LIMITS_REDIS_PING_MS;
-			if (env === undefined) delete process.env.LIMITS_REDIS_PING_MS;
-			else process.env.LIMITS_REDIS_PING_MS = env;
+			const prev = process.env.LIMITS_STORE_PING_MS;
+			if (env === undefined) delete process.env.LIMITS_STORE_PING_MS;
+			else process.env.LIMITS_STORE_PING_MS = env;
 			const handlers: Record<string, (e: unknown) => void> = {};
 			const ping = jest.fn(() => Promise.resolve("PONG"));
 			const ctor = jest.fn();
@@ -133,8 +200,8 @@ describe("Redis adapter", () => {
 				store.start();
 			});
 			jest.dontMock("ioredis");
-			if (prev === undefined) delete process.env.LIMITS_REDIS_PING_MS;
-			else process.env.LIMITS_REDIS_PING_MS = prev;
+			if (prev === undefined) delete process.env.LIMITS_STORE_PING_MS;
+			else process.env.LIMITS_STORE_PING_MS = prev;
 			return { ctor, handlers, ping, store };
 		};
 

@@ -31,12 +31,13 @@ export interface StoreContext {
 	onError?: (err: unknown) => void;
 	/** Prefix of every key the store writes (`limits:<namespace>:<service>:` by default). */
 	prefix?: string;
-	/** Per command timeout, 100 ms by default. */
+	/** Per command timeout in ms, 100 by default (`resolveStore` fills it from the store config or `LIMITS_STORE_TIMEOUT_MS`). */
 	timeoutMs?: number;
 }
 
 const WARN_EVERY_MS = 10_000;
 export const DEFAULT_WINDOW_MS = 60_000;
+export const DEFAULT_TIMEOUT_MS = 100;
 export const ALLOW: Readonly<HitResult> = Object.freeze({ allowed: true, retryAfterMs: 0, count: 0 });
 
 /**
@@ -51,7 +52,7 @@ export abstract class GuardedStore implements LimitsStore {
 	protected closed = false;
 
 	constructor(protected readonly ctx: StoreContext = {}) {
-		this.timeoutMs = ctx.timeoutMs ?? 100;
+		this.timeoutMs = ctx.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 		this.prefix = ctx.prefix ?? "";
 	}
 
@@ -86,7 +87,10 @@ export abstract class GuardedStore implements LimitsStore {
 			return await Promise.race([
 				fn(),
 				new Promise<never>((_, reject) => {
-					timer = setTimeout(() => reject(new Error("limits store timeout")), this.timeoutMs);
+					// After an event loop block Node runs the expired timer before the poll phase hands over the reply
+					// that arrived meanwhile: yield once (`setImmediate` runs after poll) so a reply that settled the
+					// command wins the race and only a command still pending gives up.
+					timer = setTimeout(() => setImmediate(() => reject(new Error("limits store timeout"))), this.timeoutMs);
 				}),
 			]);
 		} catch (err) {
