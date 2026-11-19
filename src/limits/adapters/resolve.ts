@@ -1,20 +1,46 @@
-import type { LimitsStore, StoreContext } from "./base";
+import { DEFAULT_TIMEOUT_MS, LimitsStore, StoreContext } from "./base";
 import { MemoryAdapter } from "./memory";
 import { NoneAdapter } from "./none";
 import { RedisAdapter, RedisAdapterOptions } from "./redis";
 
-export type StoreConfig =
-	| false
-	| string
-	| LimitsStore
-	| { type: "Memory" | "Redis" | "None"; options?: RedisAdapterOptions };
+export interface StoreObjectConfig {
+	type: "Memory" | "Redis" | "None";
+	options?: RedisAdapterOptions;
+	/** Per command timeout in ms (positive integer, default env `LIMITS_STORE_TIMEOUT_MS`, else 100). */
+	timeoutMs?: number;
+}
+
+export type StoreConfig = false | string | LimitsStore | StoreObjectConfig;
+
+let warnedEnvTimeout = false;
+
+function validTimeout(v: unknown): v is number {
+	return typeof v === "number" && Number.isInteger(v) && v > 0;
+}
+
+/** `LIMITS_STORE_TIMEOUT_MS`: a positive integer, else the default (warns once). */
+function envTimeout(logger?: StoreContext["logger"]): number {
+	const raw = process.env.LIMITS_STORE_TIMEOUT_MS?.trim();
+	if (!raw) return DEFAULT_TIMEOUT_MS;
+	const n = /^\d+$/.test(raw) ? Number(raw) : NaN;
+	if (validTimeout(n)) return n;
+	if (!warnedEnvTimeout) {
+		warnedEnvTimeout = true;
+		logger?.warn(`Invalid LIMITS_STORE_TIMEOUT_MS, using ${DEFAULT_TIMEOUT_MS} ms`);
+	}
+	return DEFAULT_TIMEOUT_MS;
+}
 
 /**
  * Resolves the store like Moleculer resolves `cacher`: `"Memory"`, `"redis://host:6379/2"`, `{ type: "Redis",
  * options: { url | client, prefix } }`, `false` (no limits), or a ready store object. A string `"false"` and a JSON
- * string are accepted too, because the usual source is an environment variable (`LIMITS_STORE`).
+ * string are accepted too, because the usual source is an environment variable (`LIMITS_STORE`). The per command timeout comes
+ * from `{ timeoutMs }` of the object form, else `ctx.timeoutMs`, else env `LIMITS_STORE_TIMEOUT_MS`, else 100 ms.
  */
-export function resolveStore(config: StoreConfig | undefined, ctx: StoreContext = {}): LimitsStore {
+export function resolveStore(config: StoreConfig | undefined, baseCtx: StoreContext = {}): LimitsStore {
+	const fromConfig = (config as { timeoutMs?: unknown } | undefined)?.timeoutMs;
+	if (fromConfig !== undefined && !validTimeout(fromConfig)) throw new Error("Limits store timeoutMs must be a positive integer");
+	const ctx: StoreContext = { ...baseCtx, timeoutMs: (fromConfig as number | undefined) ?? baseCtx.timeoutMs ?? envTimeout(baseCtx.logger) };
 	let cfg: StoreConfig | undefined = config;
 	if (typeof cfg === "string") {
 		const s = cfg.trim();
