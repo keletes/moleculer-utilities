@@ -29,7 +29,7 @@ export interface RedisAdapterOptions {
 	client?: RedisLikeClient;
 	prefix?: string;
 	/**
-	 * `PING` interval of the adapter's own client, in ms (default env `LIMITS_REDIS_PING_MS`, else 10000; 0 disables).
+	 * `PING` interval of the adapter's own client, in ms (default env `LIMITS_STORE_PING_MS`, else 10000; 0 disables).
 	 * Keeps the connection from going idle: a network hop (conntrack, Cilium, a load balancer) drops idle TCP
 	 * connections, and the first command after that would pay a reconnect longer than the 100 ms command timeout.
 	 * ioredis has no ping option: the adapter pings on a (unref'd) timer. Ignored for an injected `client`.
@@ -54,7 +54,7 @@ function loadIoredis(): new (...args: any[]) => unknown {
 const DEFAULT_PING_MS = 10_000;
 
 function resolvePingMs(opt?: number): number {
-	const raw = opt ?? (process.env.LIMITS_REDIS_PING_MS !== undefined && process.env.LIMITS_REDIS_PING_MS !== "" ? Number(process.env.LIMITS_REDIS_PING_MS) : DEFAULT_PING_MS);
+	const raw = opt ?? (process.env.LIMITS_STORE_PING_MS !== undefined && process.env.LIMITS_STORE_PING_MS !== "" ? Number(process.env.LIMITS_STORE_PING_MS) : DEFAULT_PING_MS);
 	return Number.isFinite(raw) && raw > 0 ? raw : 0;
 }
 

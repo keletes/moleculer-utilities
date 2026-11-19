@@ -173,9 +173,9 @@ describe("Redis adapter", () => {
 
 	describe("own client keep-alive", () => {
 		const make = async (opts: Record<string, unknown>, env?: string) => {
-			const prev = process.env.LIMITS_REDIS_PING_MS;
-			if (env === undefined) delete process.env.LIMITS_REDIS_PING_MS;
-			else process.env.LIMITS_REDIS_PING_MS = env;
+			const prev = process.env.LIMITS_STORE_PING_MS;
+			if (env === undefined) delete process.env.LIMITS_STORE_PING_MS;
+			else process.env.LIMITS_STORE_PING_MS = env;
 			const handlers: Record<string, (e: unknown) => void> = {};
 			const ping = jest.fn(() => Promise.resolve("PONG"));
 			const ctor = jest.fn();
@@ -200,8 +200,8 @@ describe("Redis adapter", () => {
 				store.start();
 			});
 			jest.dontMock("ioredis");
-			if (prev === undefined) delete process.env.LIMITS_REDIS_PING_MS;
-			else process.env.LIMITS_REDIS_PING_MS = prev;
+			if (prev === undefined) delete process.env.LIMITS_STORE_PING_MS;
+			else process.env.LIMITS_STORE_PING_MS = prev;
 			return { ctor, handlers, ping, store };
 		};
 
