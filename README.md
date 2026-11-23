@@ -7,12 +7,27 @@ Shared Moleculer mixins, middlewares and request limits of the Keletes services.
 ```
 
 ```ts
-import { Authorizer, Docs } from "@keletes/moleculer-utilities/mixins";
+import { Authorizer, Docs, ValidateEntity } from "@keletes/moleculer-utilities/mixins";
 import { InterNamespace, K8sHealthCheck } from "@keletes/moleculer-utilities/middlewares";
 import { Limits, LimitExceededError, RateLimitStore, clientIp, PodCpuUsage, BusyGuard } from "@keletes/moleculer-utilities/limits";
 ```
 
 `Authorizer({ whitelist, implies })`: `implies` maps an action to the permission(s) that also allow it, e.g. `{ "drawer.jobStatus": "drawer.draw", "drawer.jobResult": ["drawer.draw", "drawer.view"] }` (any one suffices). One level only: no transitive chains.
+
+## `ValidateEntity`
+
+With `ValidateEntity()` the entity is validated on every write: `moleculer-db` runs `settings.entityValidator` on `create` and `insert`, and the mixin adds `update`: the stored entity with the changes applied (respecting `settings.useDotNotation`) goes through `this.validateEntity` before the write, and a failure throws the validator's own error with nothing written. It adds no settings: it reuses `entityValidator` (a function, or a schema compiled by `broker.validator`), does nothing without one, and leaves an unknown id to moleculer-db's 404. The service's own `beforeEntityUpdate` still runs first. The id fields (`_id`, `settings.idField`) are not part of the validated entity. `moleculer-db` is an optional peer dependency (needed only by services using this mixin).
+
+```ts
+import DbService from "moleculer-db";
+import { ValidateEntity } from "@keletes/moleculer-utilities/mixins";
+
+broker.createService({
+	name: "people",
+	mixins: [DbService, ValidateEntity()],
+	settings: { entityValidator: { name: { type: "string", min: 2 }, age: { type: "number" }, $$strict: true } },
+});
+```
 
 ## `limits`
 
