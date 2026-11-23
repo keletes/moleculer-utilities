@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 describe("built package layout", () => {
 	it.each([
-		["mixins", ["Authorizer", "Docs"]],
+		["mixins", ["Authorizer", "Docs", "ValidateEntity"]],
 		["middlewares", ["InterNamespace", "K8sHealthCheck"]],
 		[
 			"limits",
