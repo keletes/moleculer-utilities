@@ -8,6 +8,8 @@ export interface InterNamespaceService {
 	fullName: string;
 	settings: Record<string, any>;
 	nodeID: string;
+	/** Actions of the service keyed by action name, only with `services(name, { withActions: true })`. */
+	actions?: Record<string, unknown>;
 }
 
 export interface InterNamespaceEventOptions {
@@ -17,8 +19,8 @@ export interface InterNamespaceEventOptions {
 
 /** Read access to another namespace, returned by `broker.interNamespace(namespace)`. */
 export interface InterNamespaceApi {
-	/** Available services of the namespace (all, or those named `name`; an empty or missing name means every service) with their settings. Local registry, no network call. */
-	services(name?: string): InterNamespaceService[];
+	/** Available services of the namespace (all, or those named `name`; an empty or missing name means every service) with their settings. `withActions: true` adds each service's `actions`. Local registry, no network call. */
+	services(name?: string, opts?: { withActions?: boolean }): InterNamespaceService[];
 	/**
 	 * Calls `handler` with the settings of every available instance of `name` (possibly empty; an empty name means
 	 * every service of the namespace) once the namespace
@@ -46,14 +48,14 @@ export default function InterNamespaceMiddleware(opts: object): Omit<ServiceSche
 	const checks: Record<string, Array<() => void>> = {};
 	let listeners = 0;
 
-	const services = (ns: string, name?: string): InterNamespaceService[] =>
-		(brokers[ns].registry.getServiceList({ onlyAvailable: true, skipInternal: true, withActions: false }) as InterNamespaceService[])
+	const services = (ns: string, name?: string, withActions = false): InterNamespaceService[] =>
+		(brokers[ns].registry.getServiceList({ onlyAvailable: true, skipInternal: true, withActions }) as InterNamespaceService[])
 			.filter(svc => !name || svc.name === name);
 
 	const api = (ns: string): InterNamespaceApi => {
 		const b = brokers[ns];
 		return {
-			services: name => services(ns, name),
+			services: (name, opts) => services(ns, name, opts?.withActions),
 
 			watch(name, handler) {
 				let last: string | undefined;

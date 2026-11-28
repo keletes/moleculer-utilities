@@ -88,6 +88,12 @@ describe("InterNamespace registry access", () => {
 		await other.destroyService(b);
 	});
 
+	it("lists the actions of a service only on request", () => {
+		const ns = main.interNamespace!("other");
+		expect(ns.services("math")[0].actions).toBeUndefined();
+		expect(Object.keys(ns.services("math", { withActions: true })[0].actions!)).toContain("math.double");
+	});
+
 	it("receives events of the namespace until unsubscribed", async () => {
 		const got: any[] = [];
 		const off = await main.interNamespace!("other").on("thing.*", (payload, sender, event) => got.push([payload, event]));
