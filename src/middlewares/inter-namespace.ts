@@ -17,10 +17,11 @@ export interface InterNamespaceEventOptions {
 
 /** Read access to another namespace, returned by `broker.interNamespace(namespace)`. */
 export interface InterNamespaceApi {
-	/** Available services of the namespace (all, or those named `name`) with their settings. Local registry, no network call. */
+	/** Available services of the namespace (all, or those named `name`; an empty or missing name means every service) with their settings. Local registry, no network call. */
 	services(name?: string): InterNamespaceService[];
 	/**
-	 * Calls `handler` with the settings of every available instance of `name` (possibly empty) once the namespace
+	 * Calls `handler` with the settings of every available instance of `name` (possibly empty; an empty name means
+	 * every service of the namespace) once the namespace
 	 * has started and again each time that result changes. Returns the unsubscribe function.
 	 */
 	watch(name: string, handler: (settings: Record<string, any>[]) => void): () => void;
