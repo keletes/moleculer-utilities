@@ -14,6 +14,16 @@ import { Limits, LimitExceededError, RateLimitStore, clientIp, PodCpuUsage, Busy
 
 `Authorizer({ whitelist, implies })`: `implies` maps an action to the permission(s) that also allow it, e.g. `{ "drawer.jobStatus": "drawer.draw", "drawer.jobResult": ["drawer.draw", "drawer.view"] }` (any one suffices). One level only: no transitive chains.
 
+## `InterNamespace`
+
+`InterNamespace(["other"])` starts one broker per listed namespace; `call("action@other")` goes through it. The middleware also sets `broker.interNamespace(namespace)` (typed through a `ServiceBroker` augmentation; throws `Unknown namespace` for a namespace not listed), which reads the live registry of that namespace:
+
+- `services(name?)`: available services with their `settings` (and `name`, `version`, `fullName`, `nodeID`), from the local registry, no network call.
+- `watch(name, handler)`: `handler(settingsList)` with the settings of every available instance of `name` (possibly empty), once the namespace broker has started and again whenever that result changes. Returns the unsubscribe function.
+- `on(event, handler, { group }?)`: subscribes to an event of that namespace (wildcards such as `orders.*` work); `handler(payload, nodeID, eventName)`. Returns an async unsubscribe. A new subscription becomes known to the other namespace's registry shortly after (discovery).
+
+Types `InterNamespaceApi`, `InterNamespaceService` and `InterNamespaceEventOptions` are exported from `@keletes/moleculer-utilities/middlewares`; importing that module is enough for `broker.interNamespace` to type-check.
+
 ## `ValidateEntity`
 
 With `ValidateEntity()` the entity is validated on every write: `moleculer-db` runs `settings.entityValidator` on `create` and `insert`, and the mixin adds `update`: the stored entity with the changes applied (respecting `settings.useDotNotation`) goes through `this.validateEntity` before the write, and a failure throws the validator's own error with nothing written. It adds no settings: it reuses `entityValidator` (a function, or a schema compiled by `broker.validator`), does nothing without one, and leaves an unknown id to moleculer-db's 404. The service's own `beforeEntityUpdate` still runs first. The id fields (`_id`, `settings.idField`) are not part of the validated entity. `moleculer-db` is an optional peer dependency (needed only by services using this mixin).

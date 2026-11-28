@@ -35,6 +35,10 @@ Source in `src/limits/`.
 - **`PodCpuUsage`** replaces `broker.getCpuUsage` (max of the `os.cpus()` sample, cgroup v2 PSI `cpu.pressure` `some avg10`, `cpu.stat` throttling when `cpu.max` is set); **`BusyGuard`** (`busyGuard: true` on an action) refuses with `QueueIsFullError` while `broker.registry.nodes.localNode.cpu` is over `BUSY_CPU_PRESSURE`; user middlewares sit inside the internal bulkhead, so it runs after the bulkhead's slot is taken. It rejects the promise instead of throwing: a synchronous throw would escape `broker.call`.
 - Tests: `test/limits.spec.ts` runs one store contract (`test/helpers/store-suite.ts`) against Memory and Redis (`test/helpers/fake-redis.ts`, a `MULTI`-capable mock with ioredis' lowercase commands); `test/limits.redis.int.ts` runs the same contract on a real Redis.
 
+## `InterNamespace` registry access
+
+`broker.interNamespace(ns)` (`src/middlewares/inter-namespace.ts`) reads the namespace broker's local registry (`services`, `watch` on its `localBus` `$services.changed`, `on` via a throwaway listener service). Tests use the `Fake` transporter, where a service joining or leaving reaches the other namespace after about a second: poll, don't sleep a fixed short time.
+
 ## Shape of this repo
 
 - Source is `src/<folder>/`. `yarn build` compiles it to the same folder names at the **package root**, which is what consumers import (`@keletes/moleculer-utilities/mixins`). Do not move the output (no `dist/`): it would break every import.
