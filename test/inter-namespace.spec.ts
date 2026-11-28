@@ -65,6 +65,29 @@ describe("InterNamespace registry access", () => {
 		expect(seen).toHaveLength(3);
 	});
 
+	it("watches every service with an empty name", async () => {
+		const ns = main.interNamespace!("other");
+		const seen: any[][] = [];
+		const unwatch = ns.watch("", s => seen.push(s));
+		const base = seen.length;
+
+		const a = other.createService({ name: "all-a", settings: { all: "a" } });
+		await until(() => seen.length > base);
+		const b = other.createService({ name: "all-b", settings: { all: "b" } });
+		await until(() => seen.some(s => s.some(x => x.all === "b")));
+		const last = seen[seen.length - 1];
+		expect(last).toEqual(expect.arrayContaining([{ all: "a" }, { all: "b" }]));
+
+		const count = seen.length;
+		await other.destroyService(a);
+		await until(() => seen.length > count);
+		expect(seen[seen.length - 1]).toEqual(expect.arrayContaining([{ all: "b" }]));
+		expect(seen[seen.length - 1]).not.toEqual(expect.arrayContaining([{ all: "a" }]));
+
+		unwatch();
+		await other.destroyService(b);
+	});
+
 	it("receives events of the namespace until unsubscribed", async () => {
 		const got: any[] = [];
 		const off = await main.interNamespace!("other").on("thing.*", (payload, sender, event) => got.push([payload, event]));

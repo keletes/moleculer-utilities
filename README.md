@@ -18,8 +18,8 @@ import { Limits, LimitExceededError, RateLimitStore, clientIp, PodCpuUsage, Busy
 
 `InterNamespace(["other"])` starts one broker per listed namespace; `call("action@other")` goes through it. The middleware also sets `broker.interNamespace(namespace)` (typed through a `ServiceBroker` augmentation; throws `Unknown namespace` for a namespace not listed), which reads the live registry of that namespace:
 
-- `services(name?)`: available services with their `settings` (and `name`, `version`, `fullName`, `nodeID`), from the local registry, no network call.
-- `watch(name, handler)`: `handler(settingsList)` with the settings of every available instance of `name` (possibly empty), once the namespace broker has started and again whenever that result changes. Returns the unsubscribe function.
+- `services(name?)`: available services (an empty or missing `name` means every service) with their `settings` (and `name`, `version`, `fullName`, `nodeID`), from the local registry, no network call.
+- `watch(name, handler)`: `handler(settingsList)` with the settings of every available instance of `name` (possibly empty; an empty `name` means every service of the namespace), once the namespace broker has started and again whenever that result changes. Returns the unsubscribe function.
 - `on(event, handler, { group }?)`: subscribes to an event of that namespace (wildcards such as `orders.*` work); `handler(payload, nodeID, eventName)`. Returns an async unsubscribe. A new subscription becomes known to the other namespace's registry shortly after (discovery).
 
 Types `InterNamespaceApi`, `InterNamespaceService` and `InterNamespaceEventOptions` are exported from `@keletes/moleculer-utilities/middlewares`; importing that module is enough for `broker.interNamespace` to type-check.
