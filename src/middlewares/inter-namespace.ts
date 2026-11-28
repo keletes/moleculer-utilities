@@ -10,6 +10,8 @@ export interface InterNamespaceService {
 	nodeID: string;
 	/** Actions of the service keyed by action name, only with `services(name, { withActions: true })`. */
 	actions?: Record<string, unknown>;
+	/** The service's `metadata`, as is (e.g. where the `Docs` mixin publishes its index, `metadata.docs`). */
+	metadata?: Record<string, unknown>;
 }
 
 export interface InterNamespaceEventOptions {

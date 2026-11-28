@@ -94,6 +94,14 @@ describe("InterNamespace registry access", () => {
 		expect(Object.keys(ns.services("math", { withActions: true })[0].actions!)).toContain("math.double");
 	});
 
+	it("includes the metadata of a service", async () => {
+		const docs = { version: "1", topics: [] };
+		const svc = await other.createService({ name: "documented", metadata: { docs } });
+		await until(() => main.interNamespace!("other").services("documented").length === 1);
+		expect(main.interNamespace!("other").services("documented")[0].metadata).toEqual({ docs });
+		await other.destroyService(svc);
+	});
+
 	it("receives events of the namespace until unsubscribed", async () => {
 		const got: any[] = [];
 		const off = await main.interNamespace!("other").on("thing.*", (payload, sender, event) => got.push([payload, event]));
